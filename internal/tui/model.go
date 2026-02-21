@@ -204,10 +204,11 @@ func (m Model) transcribeCmd(wavData []byte) tea.Cmd {
 
 func (m Model) pasteCmd(text string) tea.Cmd {
 	delayMs := m.Config.Paste.DelayMs
+	mode := m.Config.Paste.Mode
 	logger := m.Logger
 	return func() tea.Msg {
-		logger.Printf("paste: writing to clipboard and simulating Ctrl+V (delay=%dms)", delayMs)
-		if err := clipboard.PasteText(text, delayMs); err != nil {
+		logger.Printf("paste: mode=%s delay=%dms", mode, delayMs)
+		if err := clipboard.PasteText(text, delayMs, mode); err != nil {
 			logger.Printf("paste error: %v", err)
 			return TranscriptionErrorMsg{Err: fmt.Errorf("paste: %w", err)}
 		}

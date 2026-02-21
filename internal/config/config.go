@@ -35,7 +35,8 @@ type TranscriptionConfig struct {
 
 // PasteConfig holds clipboard paste settings.
 type PasteConfig struct {
-	DelayMs int `toml:"delay_ms"`
+	DelayMs int    `toml:"delay_ms"`
+	Mode    string `toml:"mode"` // "type" (direct typing) or "clipboard" (Ctrl+V)
 }
 
 // Config is the top-level configuration.
@@ -69,6 +70,7 @@ func Default() *Config {
 		},
 		Paste: PasteConfig{
 			DelayMs: 50,
+			Mode:    "type",
 		},
 	}
 }

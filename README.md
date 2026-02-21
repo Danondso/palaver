@@ -124,7 +124,8 @@ command = ""                           # for "command" provider: e.g. "whisper-c
 tls_skip_verify = false                # skip TLS certificate verification (for self-signed certs)
 
 [paste]
-delay_ms = 50   # delay before paste (ms)
+delay_ms = 50     # delay before paste (ms)
+mode = "type"     # "type" (direct typing, works in terminals) or "clipboard" (Ctrl+V)
 ```
 
 ### Custom Chimes

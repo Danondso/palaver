@@ -17,13 +17,21 @@ func isWayland() bool {
 }
 
 // PasteText inserts text into the currently focused application.
-// On Wayland it uses wtype to type text directly (avoids clipboard mismatch
-// between X11 and Wayland). On X11 it writes to clipboard and simulates Ctrl+V.
-func PasteText(text string, delayMs int) error {
+// mode "type" uses direct typing (ydotool type / xdotool type) which works in all apps.
+// mode "clipboard" uses clipboard + Ctrl+V (legacy behavior).
+func PasteText(text string, delayMs int, mode string) error {
 	if delayMs > 0 {
 		time.Sleep(time.Duration(delayMs) * time.Millisecond)
 	}
 
+	if mode == "type" {
+		if isWayland() {
+			return typeWaylandDirect(text)
+		}
+		return typeX11Direct(text)
+	}
+
+	// clipboard mode (legacy)
 	if isWayland() {
 		return typeWayland(text)
 	}
@@ -47,6 +55,36 @@ func ensureYdotoold() {
 	}
 	// Give it a moment to initialize
 	time.Sleep(200 * time.Millisecond)
+}
+
+func typeWaylandDirect(text string) error {
+	if _, err := exec.LookPath("ydotool"); err != nil {
+		return fmt.Errorf("ydotool not found: %w (install with: apt install ydotool)", err)
+	}
+	ensureYdotoold()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "ydotool", "type", "--delay", "0", "--", text)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ydotool type: %w", err)
+	}
+	return nil
+}
+
+func typeX11Direct(text string) error {
+	if _, err := exec.LookPath("xdotool"); err != nil {
+		return fmt.Errorf("xdotool not found: %w (install with: apt install xdotool)", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "xdotool", "type", "--delay", "0", "--", text)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("xdotool type: %w", err)
+	}
+	return nil
 }
 
 func typeWayland(text string) error {
