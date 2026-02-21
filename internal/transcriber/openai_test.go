@@ -49,7 +49,7 @@ func TestOpenAITranscribe(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcriber := NewOpenAI(server.URL, "test-model", 30, nil)
+	transcriber := NewOpenAI(server.URL, "test-model", 30, false, nil)
 	wavData := []byte("fake-wav-data")
 	result, err := transcriber.Transcribe(context.Background(), wavData)
 	if err != nil {
@@ -76,7 +76,7 @@ func TestOpenAITranscribeError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	transcriber := NewOpenAI(server.URL, "bad-model", 30, nil)
+	transcriber := NewOpenAI(server.URL, "bad-model", 30, false, nil)
 	_, err := transcriber.Transcribe(context.Background(), []byte("data"))
 	if err == nil {
 		t.Error("expected error for 404 response")

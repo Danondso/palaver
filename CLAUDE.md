@@ -59,3 +59,4 @@ Runtime (Wayland/Cosmic): `wl-clipboard`, `ydotool`, Linux evdev access (user in
 - Mutex-protected recording state for thread safety
 - Embedded WAV assets compiled into the binary (`chime/` package uses `//go:embed`)
 - Default transcription endpoint: `http://localhost:5092` (NVIDIA Parakeet / faster-whisper-server)
+- Default max recording duration: 60 seconds

@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewWithDefaults(t *testing.T) {
-	p, err := New("", "", true)
+	p, err := New("", "", true, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestNewWithDefaults(t *testing.T) {
 }
 
 func TestNewDisabled(t *testing.T) {
-	p, err := New("", "", false)
+	p, err := New("", "", false, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestNewWithCustomPaths(t *testing.T) {
 	os.WriteFile(startPath, defaultStartWav, 0644)
 	os.WriteFile(stopPath, defaultStopWav, 0644)
 
-	p, err := New(startPath, stopPath, true)
+	p, err := New(startPath, stopPath, true, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -57,12 +57,12 @@ func TestNewWithCustomPaths(t *testing.T) {
 }
 
 func TestNewWithBadPath(t *testing.T) {
-	_, err := New("/nonexistent/path/start.wav", "", true)
+	_, err := New("/nonexistent/path/start.wav", "", true, nil)
 	if err == nil {
 		t.Error("expected error for nonexistent start path")
 	}
 
-	_, err = New("", "/nonexistent/path/stop.wav", true)
+	_, err = New("", "/nonexistent/path/stop.wav", true, nil)
 	if err == nil {
 		t.Error("expected error for nonexistent stop path")
 	}

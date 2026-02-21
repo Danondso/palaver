@@ -18,8 +18,8 @@ func TestDefaultValues(t *testing.T) {
 	if cfg.Audio.TargetSampleRate != 16000 {
 		t.Errorf("expected sample rate 16000, got %d", cfg.Audio.TargetSampleRate)
 	}
-	if cfg.Audio.MaxDurationSec != 30 {
-		t.Errorf("expected max duration 30, got %d", cfg.Audio.MaxDurationSec)
+	if cfg.Audio.MaxDurationSec != 60 {
+		t.Errorf("expected max duration 60, got %d", cfg.Audio.MaxDurationSec)
 	}
 	if !cfg.Audio.ChimeEnabled {
 		t.Error("expected chime enabled by default")

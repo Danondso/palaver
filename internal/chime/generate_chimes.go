@@ -5,6 +5,7 @@
 package main
 
 import (
+	"log"
 	"math"
 	"os"
 
@@ -21,7 +22,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	os.WriteFile("assets/start.wav", startWav, 0644)
+	if err := os.WriteFile("assets/start.wav", startWav, 0644); err != nil {
+		log.Fatal(err)
+	}
 
 	// Stop chime: descending tone (C5 523Hz -> A4 440Hz)
 	stopSamples := generateChime(sampleRate, duration, 523, 440)
@@ -29,7 +32,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	os.WriteFile("assets/stop.wav", stopWav, 0644)
+	if err := os.WriteFile("assets/stop.wav", stopWav, 0644); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func generateChime(sampleRate int, duration, startFreq, endFreq float64) []int16 {

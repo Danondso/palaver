@@ -23,7 +23,7 @@ type HealthChecker interface {
 func New(cfg *config.TranscriptionConfig, logger *log.Logger) (Transcriber, error) {
 	switch cfg.Provider {
 	case "openai":
-		return NewOpenAI(cfg.BaseURL, cfg.Model, cfg.TimeoutSec, logger), nil
+		return NewOpenAI(cfg.BaseURL, cfg.Model, cfg.TimeoutSec, cfg.TLSSkipVerify, logger), nil
 	case "command":
 		if cfg.Command == "" {
 			return nil, fmt.Errorf("command provider requires a non-empty command")

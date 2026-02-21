@@ -110,7 +110,7 @@ device = ""              # empty = auto-detect keyboard
 
 [audio]
 target_sample_rate = 16000  # resample to this rate for the transcription backend
-max_duration_sec = 30       # auto-stop recording after this many seconds
+max_duration_sec = 60       # auto-stop recording after this many seconds
 chime_start = ""            # path to custom start chime WAV (empty = built-in)
 chime_stop = ""             # path to custom stop chime WAV (empty = built-in)
 chime_enabled = true        # set to false to disable chimes
@@ -121,6 +121,7 @@ base_url = "http://localhost:5092"     # transcription server URL
 model = "default"                      # model name sent to the server
 timeout_sec = 30                       # transcription request timeout
 command = ""                           # for "command" provider: e.g. "whisper-cpp -f {input}"
+tls_skip_verify = false                # skip TLS certificate verification (for self-signed certs)
 
 [paste]
 delay_ms = 50   # delay before paste (ms)

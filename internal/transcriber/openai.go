@@ -3,6 +3,7 @@ package transcriber
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
@@ -23,12 +24,18 @@ type OpenAI struct {
 }
 
 // NewOpenAI creates an OpenAI-compatible transcriber.
-func NewOpenAI(baseURL, model string, timeoutSec int, logger *log.Logger) *OpenAI {
+func NewOpenAI(baseURL, model string, timeoutSec int, tlsSkipVerify bool, logger *log.Logger) *OpenAI {
+	client := &http.Client{}
+	if tlsSkipVerify {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
 	return &OpenAI{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		model:      model,
 		timeoutSec: timeoutSec,
-		client:     &http.Client{},
+		client:     client,
 		logger:     logger,
 	}
 }

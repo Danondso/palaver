@@ -25,11 +25,12 @@ type AudioConfig struct {
 
 // TranscriptionConfig holds transcription provider settings.
 type TranscriptionConfig struct {
-	Provider   string `toml:"provider"`
-	BaseURL    string `toml:"base_url"`
-	Model      string `toml:"model"`
-	TimeoutSec int    `toml:"timeout_sec"`
-	Command    string `toml:"command"`
+	Provider      string `toml:"provider"`
+	BaseURL       string `toml:"base_url"`
+	Model         string `toml:"model"`
+	TimeoutSec    int    `toml:"timeout_sec"`
+	Command       string `toml:"command"`
+	TLSSkipVerify bool   `toml:"tls_skip_verify"`
 }
 
 // PasteConfig holds clipboard paste settings.
@@ -54,7 +55,7 @@ func Default() *Config {
 		},
 		Audio: AudioConfig{
 			TargetSampleRate: 16000,
-			MaxDurationSec:   30,
+			MaxDurationSec:   60,
 			ChimeStart:       "",
 			ChimeStop:        "",
 			ChimeEnabled:     true,

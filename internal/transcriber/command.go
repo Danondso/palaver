@@ -48,8 +48,7 @@ func (c *Command) Transcribe(ctx context.Context, wavData []byte) (string, error
 	tmpFile.Close()
 
 	cmdStr := strings.ReplaceAll(c.command, "{input}", tmpPath)
-	parts := strings.Fields(cmdStr)
-	if len(parts) == 0 {
+	if cmdStr == "" {
 		return "", fmt.Errorf("empty command after substitution")
 	}
 
@@ -58,7 +57,7 @@ func (c *Command) Transcribe(ctx context.Context, wavData []byte) (string, error
 	}
 
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
+	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 	output, err := cmd.Output()
 	latency := time.Since(start)
 	if err != nil {

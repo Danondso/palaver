@@ -74,7 +74,7 @@ type testTranscriptionConfig struct {
 func newTranscriberFromValues(provider, baseURL, model string, timeoutSec int, command string) (Transcriber, error) {
 	switch provider {
 	case "openai":
-		return NewOpenAI(baseURL, model, timeoutSec, nil), nil
+		return NewOpenAI(baseURL, model, timeoutSec, false, nil), nil
 	case "command":
 		if command == "" {
 			return nil, fmt.Errorf("command provider requires a non-empty command")

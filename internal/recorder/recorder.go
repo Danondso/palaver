@@ -56,7 +56,7 @@ func (r *Recorder) Start() error {
 		return fmt.Errorf("already recording")
 	}
 
-	r.buf = r.buf[:0]
+	r.buf = nil
 	r.truncated = false
 	r.startTime = time.Now()
 
@@ -139,12 +139,13 @@ func (r *Recorder) readLoop(stream *portaudio.Stream, inputBuf []int16, channels
 func (r *Recorder) Stop() ([]byte, bool, error) {
 	r.mu.Lock()
 	wasRecording := r.recording
+	wasTruncated := r.truncated
 	r.recording = false
 	done := r.done
 	loopDone := r.loopDone
 	r.mu.Unlock()
 
-	if !wasRecording {
+	if !wasRecording && !wasTruncated {
 		return nil, false, fmt.Errorf("not recording")
 	}
 
@@ -305,14 +306,21 @@ func (ws *writeSeeker) Write(p []byte) (int, error) {
 }
 
 func (ws *writeSeeker) Seek(offset int64, whence int) (int64, error) {
+	var newPos int
 	switch whence {
 	case 0: // io.SeekStart
-		ws.pos = int(offset)
+		newPos = int(offset)
 	case 1: // io.SeekCurrent
-		ws.pos += int(offset)
+		newPos = ws.pos + int(offset)
 	case 2: // io.SeekEnd
-		ws.pos = len(ws.buf) + int(offset)
+		newPos = len(ws.buf) + int(offset)
+	default:
+		return 0, fmt.Errorf("invalid whence: %d", whence)
 	}
+	if newPos < 0 || newPos > len(ws.buf) {
+		return 0, fmt.Errorf("seek position %d out of bounds [0, %d]", newPos, len(ws.buf))
+	}
+	ws.pos = newPos
 	return int64(ws.pos), nil
 }
 
@@ -372,43 +380,62 @@ func ValidateWAVHeader(data []byte) (sampleRate int, channels int, bitDepth int,
 
 	r := bytes.NewReader(data)
 
+	// read wraps binary.Read to capture the first error.
+	var firstErr error
+	read := func(v interface{}) {
+		if firstErr != nil {
+			return
+		}
+		firstErr = binary.Read(r, binary.LittleEndian, v)
+	}
+
 	var riffID [4]byte
-	binary.Read(r, binary.LittleEndian, &riffID)
+	read(&riffID)
+	if firstErr != nil {
+		return 0, 0, 0, fmt.Errorf("read RIFF header: %w", firstErr)
+	}
 	if string(riffID[:]) != "RIFF" {
 		return 0, 0, 0, fmt.Errorf("not a RIFF file")
 	}
 
 	var fileSize uint32
-	binary.Read(r, binary.LittleEndian, &fileSize)
+	read(&fileSize)
 
 	var waveID [4]byte
-	binary.Read(r, binary.LittleEndian, &waveID)
+	read(&waveID)
+	if firstErr != nil {
+		return 0, 0, 0, fmt.Errorf("read WAVE header: %w", firstErr)
+	}
 	if string(waveID[:]) != "WAVE" {
 		return 0, 0, 0, fmt.Errorf("not a WAVE file")
 	}
 
 	var fmtID [4]byte
-	binary.Read(r, binary.LittleEndian, &fmtID)
+	read(&fmtID)
 
 	var fmtSize uint32
-	binary.Read(r, binary.LittleEndian, &fmtSize)
+	read(&fmtSize)
 
 	var audioFormat uint16
-	binary.Read(r, binary.LittleEndian, &audioFormat)
+	read(&audioFormat)
 
 	var numChannels uint16
-	binary.Read(r, binary.LittleEndian, &numChannels)
+	read(&numChannels)
 
 	var sr uint32
-	binary.Read(r, binary.LittleEndian, &sr)
+	read(&sr)
 
 	var byteRate uint32
 	var blockAlign uint16
-	binary.Read(r, binary.LittleEndian, &byteRate)
-	binary.Read(r, binary.LittleEndian, &blockAlign)
+	read(&byteRate)
+	read(&blockAlign)
 
 	var bitsPerSample uint16
-	binary.Read(r, binary.LittleEndian, &bitsPerSample)
+	read(&bitsPerSample)
+
+	if firstErr != nil {
+		return 0, 0, 0, fmt.Errorf("read WAV format: %w", firstErr)
+	}
 
 	return int(sr), int(numChannels), int(bitsPerSample), nil
 }

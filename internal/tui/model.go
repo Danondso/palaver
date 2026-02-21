@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -208,9 +209,9 @@ func (m Model) pasteCmd(text string) tea.Cmd {
 		logger.Printf("paste: writing to clipboard and simulating Ctrl+V (delay=%dms)", delayMs)
 		if err := clipboard.PasteText(text, delayMs); err != nil {
 			logger.Printf("paste error: %v", err)
-		} else {
-			logger.Printf("paste: success")
+			return TranscriptionErrorMsg{Err: fmt.Errorf("paste: %w", err)}
 		}
+		logger.Printf("paste: success")
 		return nil
 	}
 }

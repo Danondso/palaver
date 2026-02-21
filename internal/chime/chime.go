@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"time"
@@ -24,17 +25,19 @@ type Player struct {
 	startData []byte
 	stopData  []byte
 	enabled   bool
+	logger    *log.Logger
 	initOnce  sync.Once
 	initErr   error
 }
 
 // New creates a Player. If startPath/stopPath are empty, embedded defaults are used.
 // If enabled is false, PlayStart/PlayStop are no-ops.
-func New(startPath, stopPath string, enabled bool) (*Player, error) {
+func New(startPath, stopPath string, enabled bool, logger *log.Logger) (*Player, error) {
 	p := &Player{
 		startData: defaultStartWav,
 		stopData:  defaultStopWav,
 		enabled:   enabled,
+		logger:    logger,
 	}
 
 	if startPath != "" {
@@ -71,12 +74,18 @@ func (p *Player) play(data []byte) {
 		reader := bytes.NewReader(data)
 		streamer, format, err := wav.Decode(reader)
 		if err != nil {
+			if p.logger != nil {
+				p.logger.Printf("chime: wav decode error: %v", err)
+			}
 			return
 		}
 		defer streamer.Close()
 
 		p.initSpeaker(format)
 		if p.initErr != nil {
+			if p.logger != nil {
+				p.logger.Printf("chime: speaker init error: %v", p.initErr)
+			}
 			return
 		}
 

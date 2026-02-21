@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"sync"
 	"syscall"
@@ -85,8 +86,15 @@ func main() {
 		log.Fatalf("create transcriber: %v", err)
 	}
 
+	// Warn if sending audio over plaintext HTTP to a non-local host
+	if u, err := url.Parse(cfg.Transcription.BaseURL); err == nil {
+		if u.Scheme == "http" && u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1" {
+			log.Printf("WARNING: transcription base_url uses plaintext HTTP to non-local host %q — audio data will be sent unencrypted", u.Hostname())
+		}
+	}
+
 	// Create chime player
-	chimePlayer, err := chime.New(cfg.Audio.ChimeStart, cfg.Audio.ChimeStop, cfg.Audio.ChimeEnabled)
+	chimePlayer, err := chime.New(cfg.Audio.ChimeStart, cfg.Audio.ChimeStop, cfg.Audio.ChimeEnabled, dbg)
 	if err != nil {
 		log.Fatalf("create chime player: %v", err)
 	}
@@ -167,5 +175,4 @@ func main() {
 
 	// Clean shutdown
 	cancel()
-	listener.Stop()
 }

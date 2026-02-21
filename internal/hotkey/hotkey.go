@@ -248,6 +248,7 @@ func (l *Listener) Start(ctx context.Context, keyCode evdev.EvCode, onDown func(
 	select {
 	case <-ctx.Done():
 		l.Stop()
+		<-errCh
 		return ctx.Err()
 	case err := <-errCh:
 		return err

@@ -42,7 +42,9 @@ func ensureYdotoold() {
 	}
 	cmd := exec.Command("ydotoold")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Start() // fire and forget
+	if err := cmd.Start(); err != nil {
+		return
+	}
 	// Give it a moment to initialize
 	time.Sleep(200 * time.Millisecond)
 }
@@ -70,6 +72,11 @@ func typeWayland(text string) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("ydotool key ctrl+v: %w", err)
 	}
+
+	// Clear clipboard after paste (best-effort)
+	time.Sleep(100 * time.Millisecond)
+	exec.CommandContext(ctx, "wl-copy", "--clear").Run()
+
 	return nil
 }
 
@@ -86,5 +93,10 @@ func pasteX11(text string) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("xdotool paste: %w", err)
 	}
+
+	// Clear clipboard after paste (best-effort)
+	time.Sleep(100 * time.Millisecond)
+	atclip.WriteAll("")
+
 	return nil
 }
