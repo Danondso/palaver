@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -60,6 +61,7 @@ type StatusCheckMsg struct {
 	MicDetected   bool
 	BackendOnline bool
 	MicDeviceName string
+	ModelName     string
 }
 
 type statusCheckTickMsg struct{}
@@ -96,11 +98,15 @@ type Model struct {
 	MicDetected    bool
 	MicDeviceName  string
 	BackendOnline  bool
+	ModelName      string
 	statusChecked  bool
+	themeName      string
 }
 
 // NewModel creates a new TUI model.
 func NewModel(cfg *config.Config, t transcriber.Transcriber, c *chime.Player, rec LevelSampler, mc MicChecker, logger *log.Logger, debug bool) Model {
+	themeName := cfg.Theme
+	applyTheme(LoadTheme(themeName))
 	return Model{
 		State:       StateIdle,
 		Config:      cfg,
@@ -111,6 +117,7 @@ func NewModel(cfg *config.Config, t transcriber.Transcriber, c *chime.Player, re
 		HotkeyName:  cfg.Hotkey.Key,
 		Logger:      logger,
 		DebugMode:   debug,
+		themeName:   themeName,
 	}
 }
 
@@ -126,6 +133,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "t":
+			next := NextTheme(m.themeName)
+			applyTheme(next)
+			m.themeName = strings.ToLower(next.Name)
+			return m, nil
 		}
 
 	case RecordingStartedMsg:
@@ -156,6 +168,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.MicDetected = msg.MicDetected
 		m.MicDeviceName = msg.MicDeviceName
 		m.BackendOnline = msg.BackendOnline
+		if msg.ModelName != "" {
+			m.ModelName = msg.ModelName
+		}
 		m.statusChecked = true
 		return m, scheduleStatusRecheck()
 
@@ -244,12 +259,20 @@ func (m Model) statusCheckCmd() tea.Cmd {
 			micName = mc.MicName()
 		}
 		backendOk := false
+		modelName := ""
 		if hc, ok := t.(transcriber.HealthChecker); ok {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			backendOk = hc.Ping(ctx) == nil
 		}
-		return StatusCheckMsg{MicDetected: micOk, BackendOnline: backendOk, MicDeviceName: micName}
+		if ml, ok := t.(transcriber.ModelLister); ok && backendOk {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if models, err := ml.ListModels(ctx); err == nil && len(models) > 0 {
+				modelName = models[0]
+			}
+		}
+		return StatusCheckMsg{MicDetected: micOk, BackendOnline: backendOk, MicDeviceName: micName, ModelName: modelName}
 	}
 }
 

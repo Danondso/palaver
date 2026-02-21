@@ -19,6 +19,12 @@ type HealthChecker interface {
 	Ping(ctx context.Context) error
 }
 
+// ModelLister is optionally implemented by transcribers that can report
+// which models are available on the backend.
+type ModelLister interface {
+	ListModels(ctx context.Context) ([]string, error)
+}
+
 // New creates a Transcriber based on the provider config.
 func New(cfg *config.TranscriptionConfig, logger *log.Logger) (Transcriber, error) {
 	switch cfg.Provider {

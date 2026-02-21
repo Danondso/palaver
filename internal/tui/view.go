@@ -8,123 +8,35 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// 80s Miami / Synthwave color palette
+// Styles — initialized with synthwave defaults, overridden by applyTheme().
 var (
-	hotPink      = lipgloss.Color("#FF6AC1")
-	cyan         = lipgloss.Color("#00E5FF")
-	purple       = lipgloss.Color("#B388FF")
-	coral        = lipgloss.Color("#FF8A80")
-	teal         = lipgloss.Color("#64FFDA")
-	sunsetOrange = lipgloss.Color("#FFAB40")
-	darkBg       = lipgloss.Color("#1A1A2E")
-	softWhite    = lipgloss.Color("#E0E0E0")
-	dimmed       = lipgloss.Color("#666666")
+	titleStyle        lipgloss.Style
+	borderStyle       lipgloss.Style
+	labelStyle        lipgloss.Style
+	transcriptStyle   lipgloss.Style
+	hotkeyStyle       lipgloss.Style
+	quitStyle         lipgloss.Style
+	idleBadge         lipgloss.Style
+	recordingBadge    lipgloss.Style
+	transcribingBadge lipgloss.Style
+	errorBadge        lipgloss.Style
+	bodyStyle         lipgloss.Style
+	debugTitleStyle   lipgloss.Style
+	debugRuleStyle    lipgloss.Style
+	debugHeaderStyle  lipgloss.Style
+	debugTimeStyle    lipgloss.Style
+	debugCategoryStyle lipgloss.Style
+	debugMsgStyle     lipgloss.Style
+	debugSepStyle     lipgloss.Style
+	visualizerStyle   lipgloss.Style
+	visualizerLabelStyle lipgloss.Style
+	statusOkStyle     lipgloss.Style
+	statusBadStyle    lipgloss.Style
 )
 
-// Styles
-var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(hotPink).
-			Background(darkBg).
-			MarginBottom(1)
-
-	borderStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(cyan).
-			Padding(1, 2).
-			Background(darkBg)
-
-	labelStyle = lipgloss.NewStyle().
-			Foreground(cyan).
-			Background(darkBg).
-			Bold(true)
-
-	transcriptStyle = lipgloss.NewStyle().
-			Foreground(purple).
-			Background(darkBg).
-			Italic(true)
-
-	hotkeyStyle = lipgloss.NewStyle().
-			Foreground(cyan).
-			Background(darkBg)
-
-	quitStyle = lipgloss.NewStyle().
-			Foreground(dimmed).
-			Background(darkBg)
-
-	idleBadge = lipgloss.NewStyle().
-			Foreground(teal).
-			Background(darkBg).
-			Bold(true)
-
-	recordingBadge = lipgloss.NewStyle().
-			Foreground(hotPink).
-			Background(darkBg).
-			Bold(true)
-
-	transcribingBadge = lipgloss.NewStyle().
-				Foreground(sunsetOrange).
-				Background(darkBg).
-				Bold(true)
-
-	errorBadge = lipgloss.NewStyle().
-			Foreground(coral).
-			Background(darkBg).
-			Bold(true)
-
-	bodyStyle = lipgloss.NewStyle().
-			Foreground(softWhite).
-			Background(darkBg)
-
-	debugTitleStyle = lipgloss.NewStyle().
-			Foreground(dimmed).
-			Background(darkBg).
-			Bold(true)
-
-	debugRuleStyle = lipgloss.NewStyle().
-			Foreground(dimmed).
-			Background(darkBg)
-
-	debugHeaderStyle = lipgloss.NewStyle().
-				Foreground(dimmed).
-				Background(darkBg).
-				Bold(true)
-
-	debugTimeStyle = lipgloss.NewStyle().
-			Foreground(dimmed).
-			Background(darkBg)
-
-	debugCategoryStyle = lipgloss.NewStyle().
-				Foreground(sunsetOrange).
-				Background(darkBg)
-
-	debugMsgStyle = lipgloss.NewStyle().
-			Foreground(dimmed).
-			Background(darkBg)
-
-	debugSepStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#444444")).
-			Background(darkBg)
-
-	visualizerStyle = lipgloss.NewStyle().
-			Foreground(hotPink).
-			Background(darkBg)
-
-	visualizerLabelStyle = lipgloss.NewStyle().
-				Foreground(dimmed).
-				Background(darkBg)
-
-	statusOkStyle = lipgloss.NewStyle().
-			Foreground(teal).
-			Background(darkBg).
-			Bold(true)
-
-	statusBadStyle = lipgloss.NewStyle().
-			Foreground(coral).
-			Background(darkBg).
-			Bold(true)
-)
+func init() {
+	applyTheme(LoadTheme("synthwave"))
+}
 
 // panelWidth is the total outer width of the main panel.
 // borderStyle has: border (1+1) = 2, padding (2+2) = 4, total chrome = 6.
@@ -174,7 +86,7 @@ func (m Model) View() string {
 	keyName := strings.TrimPrefix(m.HotkeyName, "KEY_")
 	b.WriteString(hotkeyStyle.Render(fmt.Sprintf("Hotkey: %s (hold to record)", keyName)))
 	b.WriteString("\n")
-	b.WriteString(quitStyle.Render("Press q to quit"))
+	b.WriteString(quitStyle.Render("Press q to quit  t: theme (" + m.themeName + ")"))
 
 	// Debug sub-panel (inside main panel)
 	if m.DebugMode || len(m.DebugEntries) > 0 {
@@ -264,13 +176,13 @@ func (m Model) renderVisualizer() string {
 
 func (m Model) renderStatusBar() string {
 	if !m.statusChecked {
-		return quitStyle.Render("Mic: ...  Backend: ...  Model: ") + quitStyle.Render(m.Config.Transcription.Model)
+		return quitStyle.Render("Mic: ...  Backend: ...  Model: ...")
 	}
 	var mic, backend string
 	if m.MicDetected {
 		mic = statusOkStyle.Render("✓")
 		if m.MicDeviceName != "" {
-			mic += quitStyle.Render(" ("+m.MicDeviceName+")")
+			mic += quitStyle.Render(" (" + m.MicDeviceName + ")")
 		}
 	} else {
 		mic = statusBadStyle.Render("✗")
@@ -280,7 +192,11 @@ func (m Model) renderStatusBar() string {
 	} else {
 		backend = statusBadStyle.Render("✗")
 	}
-	model := quitStyle.Render(m.Config.Transcription.Model)
+	modelName := m.ModelName
+	if modelName == "" {
+		modelName = "n/a"
+	}
+	model := quitStyle.Render(modelName)
 	return quitStyle.Render("Mic: ") + mic + quitStyle.Render("  Backend: ") + backend + quitStyle.Render("  Model: ") + model
 }
 

@@ -30,8 +30,8 @@ func TestDefaultValues(t *testing.T) {
 	if cfg.Transcription.BaseURL != "http://localhost:5092" {
 		t.Errorf("expected base URL http://localhost:5092, got %s", cfg.Transcription.BaseURL)
 	}
-	if cfg.Transcription.Model != "default" {
-		t.Errorf("expected model default, got %s", cfg.Transcription.Model)
+	if cfg.Transcription.Model != "whisper-1" {
+		t.Errorf("expected model whisper-1, got %s", cfg.Transcription.Model)
 	}
 	if cfg.Transcription.TimeoutSec != 30 {
 		t.Errorf("expected timeout 30, got %d", cfg.Transcription.TimeoutSec)

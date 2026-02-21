@@ -41,6 +41,7 @@ type PasteConfig struct {
 
 // Config is the top-level configuration.
 type Config struct {
+	Theme         string              `toml:"theme"`
 	Hotkey        HotkeyConfig        `toml:"hotkey"`
 	Audio         AudioConfig         `toml:"audio"`
 	Transcription TranscriptionConfig `toml:"transcription"`
@@ -50,6 +51,7 @@ type Config struct {
 // Default returns a Config populated with all default values.
 func Default() *Config {
 	return &Config{
+		Theme: "synthwave",
 		Hotkey: HotkeyConfig{
 			Key:    "KEY_RIGHTCTRL",
 			Device: "",
@@ -64,7 +66,7 @@ func Default() *Config {
 		Transcription: TranscriptionConfig{
 			Provider:   "openai",
 			BaseURL:    "http://localhost:5092",
-			Model:      "default",
+			Model:      "whisper-1",
 			TimeoutSec: 30,
 			Command:    "",
 		},

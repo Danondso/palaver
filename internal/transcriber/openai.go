@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -56,6 +57,42 @@ func (o *OpenAI) Ping(ctx context.Context) error {
 	}
 	resp.Body.Close()
 	return nil
+}
+
+// ListModels queries the /v1/models endpoint and returns available model IDs.
+func (o *OpenAI) ListModels(ctx context.Context) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, o.baseURL+"/v1/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("build models request: %w", err)
+	}
+
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("list models: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("list models: status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode models response: %w", err)
+	}
+
+	models := make([]string, len(result.Data))
+	for i, m := range result.Data {
+		models[i] = m.ID
+	}
+	return models, nil
 }
 
 // Transcribe sends WAV data to the OpenAI-compatible endpoint and returns the text.
