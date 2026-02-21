@@ -10,28 +10,28 @@ import (
 
 // Styles — initialized with synthwave defaults, overridden by applyTheme().
 var (
-	titleStyle        lipgloss.Style
-	borderStyle       lipgloss.Style
-	labelStyle        lipgloss.Style
-	transcriptStyle   lipgloss.Style
-	hotkeyStyle       lipgloss.Style
-	quitStyle         lipgloss.Style
-	idleBadge         lipgloss.Style
-	recordingBadge    lipgloss.Style
-	transcribingBadge lipgloss.Style
-	errorBadge        lipgloss.Style
-	bodyStyle         lipgloss.Style
-	debugTitleStyle   lipgloss.Style
-	debugRuleStyle    lipgloss.Style
-	debugHeaderStyle  lipgloss.Style
-	debugTimeStyle    lipgloss.Style
-	debugCategoryStyle lipgloss.Style
-	debugMsgStyle     lipgloss.Style
-	debugSepStyle     lipgloss.Style
-	visualizerStyle   lipgloss.Style
+	titleStyle           lipgloss.Style
+	borderStyle          lipgloss.Style
+	labelStyle           lipgloss.Style
+	transcriptStyle      lipgloss.Style
+	hotkeyStyle          lipgloss.Style
+	quitStyle            lipgloss.Style
+	idleBadge            lipgloss.Style
+	recordingBadge       lipgloss.Style
+	transcribingBadge    lipgloss.Style
+	errorBadge           lipgloss.Style
+	bodyStyle            lipgloss.Style
+	debugTitleStyle      lipgloss.Style
+	debugRuleStyle       lipgloss.Style
+	debugHeaderStyle     lipgloss.Style
+	debugTimeStyle       lipgloss.Style
+	debugCategoryStyle   lipgloss.Style
+	debugMsgStyle        lipgloss.Style
+	debugSepStyle        lipgloss.Style
+	visualizerStyle      lipgloss.Style
 	visualizerLabelStyle lipgloss.Style
-	statusOkStyle     lipgloss.Style
-	statusBadStyle    lipgloss.Style
+	statusOkStyle        lipgloss.Style
+	statusBadStyle       lipgloss.Style
 )
 
 func init() {
@@ -44,8 +44,8 @@ func init() {
 // So we pass panelWidth - 2 (border) to Width(), and the actual text area
 // is panelWidth - 6 (border + padding).
 const panelWidth = 80
-const panelWidthForStyle = panelWidth - 2  // passed to borderStyle.Width()
-const panelContentWidth = panelWidth - 6   // actual usable text area
+const panelWidthForStyle = panelWidth - 2 // passed to borderStyle.Width()
+const panelContentWidth = panelWidth - 6  // actual usable text area
 
 // View renders the TUI.
 func (m Model) View() string {
@@ -86,7 +86,11 @@ func (m Model) View() string {
 	keyName := strings.TrimPrefix(m.HotkeyName, "KEY_")
 	b.WriteString(hotkeyStyle.Render(fmt.Sprintf("Hotkey: %s (hold to record)", keyName)))
 	b.WriteString("\n")
-	b.WriteString(quitStyle.Render("Press q to quit  t: theme (" + m.themeName + ")"))
+	footer := "Press q to quit  t: theme (" + m.themeName + ")"
+	if m.Server != nil {
+		footer += "  r: restart server"
+	}
+	b.WriteString(quitStyle.Render(footer))
 
 	// Debug sub-panel (inside main panel)
 	if m.DebugMode || len(m.DebugEntries) > 0 {
@@ -187,10 +191,17 @@ func (m Model) renderStatusBar() string {
 	} else {
 		mic = statusBadStyle.Render("✗")
 	}
-	if m.BackendOnline {
-		backend = statusOkStyle.Render("✓")
-	} else {
-		backend = statusBadStyle.Render("✗")
+	switch m.serverState {
+	case "starting":
+		backend = quitStyle.Render("↻ starting...")
+	case "error":
+		backend = statusBadStyle.Render("✗ error")
+	default:
+		if m.BackendOnline {
+			backend = statusOkStyle.Render("✓")
+		} else {
+			backend = statusBadStyle.Render("✗")
+		}
 	}
 	modelName := m.ModelName
 	if modelName == "" {

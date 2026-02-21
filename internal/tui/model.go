@@ -12,6 +12,7 @@ import (
 	"github.com/Danondso/palaver/internal/chime"
 	"github.com/Danondso/palaver/internal/clipboard"
 	"github.com/Danondso/palaver/internal/config"
+	"github.com/Danondso/palaver/internal/server"
 	"github.com/Danondso/palaver/internal/transcriber"
 )
 
@@ -66,11 +67,20 @@ type StatusCheckMsg struct {
 
 type statusCheckTickMsg struct{}
 
+// ServerStateMsg carries a server lifecycle state update.
+type ServerStateMsg struct {
+	State  string // "starting", "running", "stopped", "error"
+	Detail string
+}
+
+type serverStartDoneMsg struct{ err error }
+type serverStartingMsg struct{}
+
 // DebugEntry is a structured debug log entry.
 type DebugEntry struct {
-	Time    string // e.g. "11:27:53"
+	Time     string // e.g. "11:27:53"
 	Category string // e.g. "hotkey", "paste", "transcribe"
-	Message string // the log message
+	Message  string // the log message
 }
 
 // DebugLogMsg carries a structured debug log entry into the TUI.
@@ -101,6 +111,10 @@ type Model struct {
 	ModelName      string
 	statusChecked  bool
 	themeName      string
+	Server       *server.Server      // nil if not using managed server
+	serverState  string              // "", "starting", "running", "stopped", "error"
+	ServerCtx    context.Context     // cancellable context for server operations
+	ServerCancel context.CancelFunc  // cancel function for ServerCtx
 }
 
 // NewModel creates a new TUI model.
@@ -123,7 +137,12 @@ func NewModel(cfg *config.Config, t transcriber.Transcriber, c *chime.Player, re
 
 // Init returns the initial command.
 func (m Model) Init() tea.Cmd {
-	return m.statusCheckCmd()
+	cmds := []tea.Cmd{m.statusCheckCmd()}
+	if m.Server != nil {
+		cmds = append(cmds, func() tea.Msg { return serverStartingMsg{} })
+		cmds = append(cmds, m.ServerStartCmd())
+	}
+	return tea.Batch(cmds...)
 }
 
 // Update handles messages and transitions state.
@@ -138,6 +157,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			applyTheme(next)
 			m.themeName = strings.ToLower(next.Name)
 			return m, nil
+		case "r":
+			if m.Server != nil {
+				m.serverState = "starting"
+				return m, m.serverRestartCmd()
+			}
 		}
 
 	case RecordingStartedMsg:
@@ -195,6 +219,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errorTimeoutMsg:
 		m.State = StateIdle
 		m.LastError = ""
+
+	case serverStartingMsg:
+		m.serverState = "starting"
+
+	case ServerStateMsg:
+		m.serverState = msg.State
+
+	case serverStartDoneMsg:
+		if msg.err != nil {
+			m.serverState = "error"
+			m.Logger.Printf("server start failed: %v", msg.err)
+		} else {
+			m.serverState = "running"
+		}
+		return m, m.statusCheckCmd()
 
 	case DebugLogMsg:
 		m.DebugEntries = append(m.DebugEntries, msg.Entry)
@@ -280,4 +319,23 @@ func scheduleStatusRecheck() tea.Cmd {
 	return tea.Tick(statusRecheckInterval, func(time.Time) tea.Msg {
 		return statusCheckTickMsg{}
 	})
+}
+
+func (m Model) serverRestartCmd() tea.Cmd {
+	srv := m.Server
+	ctx := m.ServerCtx
+	return func() tea.Msg {
+		err := srv.Restart(ctx)
+		return serverStartDoneMsg{err: err}
+	}
+}
+
+// ServerStartCmd returns a tea.Cmd that starts the managed server.
+func (m Model) ServerStartCmd() tea.Cmd {
+	srv := m.Server
+	ctx := m.ServerCtx
+	return func() tea.Msg {
+		err := srv.Start(ctx)
+		return serverStartDoneMsg{err: err}
+	}
 }

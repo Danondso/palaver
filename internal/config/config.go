@@ -39,6 +39,13 @@ type PasteConfig struct {
 	Mode    string `toml:"mode"` // "type" (direct typing) or "clipboard" (Ctrl+V)
 }
 
+// ServerConfig holds managed backend server settings.
+type ServerConfig struct {
+	AutoStart bool   `toml:"auto_start"`
+	DataDir   string `toml:"data_dir"`
+	Port      int    `toml:"port"`
+}
+
 // Config is the top-level configuration.
 type Config struct {
 	Theme         string              `toml:"theme"`
@@ -46,6 +53,7 @@ type Config struct {
 	Audio         AudioConfig         `toml:"audio"`
 	Transcription TranscriptionConfig `toml:"transcription"`
 	Paste         PasteConfig         `toml:"paste"`
+	Server        ServerConfig        `toml:"server"`
 }
 
 // Default returns a Config populated with all default values.
@@ -74,6 +82,11 @@ func Default() *Config {
 			DelayMs: 50,
 			Mode:    "type",
 		},
+		Server: ServerConfig{
+			AutoStart: true,
+			DataDir:   "",
+			Port:      5092,
+		},
 	}
 }
 
@@ -84,6 +97,15 @@ func DefaultPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".config", "palaver", "config.toml")
+}
+
+// DefaultDataDir returns the default data directory (~/.local/share/palaver).
+func DefaultDataDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".local", "share", "palaver")
 }
 
 // Load reads the TOML config from path. If the file does not exist,

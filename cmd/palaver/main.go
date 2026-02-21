@@ -18,6 +18,7 @@ import (
 	"github.com/Danondso/palaver/internal/config"
 	"github.com/Danondso/palaver/internal/hotkey"
 	"github.com/Danondso/palaver/internal/recorder"
+	"github.com/Danondso/palaver/internal/server"
 	"github.com/Danondso/palaver/internal/transcriber"
 	"github.com/Danondso/palaver/internal/tui"
 )
@@ -34,7 +35,58 @@ func (micCheckerAdapter) MicName() string {
 	return recorder.MicName()
 }
 
+func runSetup(cfg *config.Config, dbg *log.Logger) {
+	srv := server.New(&cfg.Server, dbg)
+
+	fmt.Println("=== Palaver Setup ===")
+	fmt.Println()
+
+	progress := func(stage string, downloaded, total int64) {
+		if total > 0 {
+			pct := float64(downloaded) / float64(total) * 100
+			fmt.Printf("\r  [%s] %.1f%% (%d / %d bytes)", stage, pct, downloaded, total)
+		} else {
+			fmt.Printf("\r  [%s] %d bytes", stage, downloaded)
+		}
+	}
+
+	if err := srv.Setup(progress); err != nil {
+		fmt.Printf("\nSetup failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println()
+	fmt.Println()
+
+	// Verify the server starts
+	fmt.Println("Starting server to verify installation...")
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := srv.Start(ctx); err != nil {
+		cancel()
+		fmt.Printf("Server failed to start: %v\n", err)
+		fmt.Println("Check the error above. If ONNX Runtime is still missing, the download may have failed.")
+		os.Exit(1)
+	}
+	fmt.Println("Server is healthy!")
+	srv.Stop()
+	cancel()
+
+	fmt.Println()
+	fmt.Println("Setup complete. Run 'palaver' to start.")
+}
+
 func main() {
+	// Handle setup subcommand before flag parsing
+	if len(os.Args) > 1 && os.Args[1] == "setup" {
+		cfgPath := config.DefaultPath()
+		cfg, err := config.Load(cfgPath)
+		if err != nil {
+			log.Fatalf("load config: %v", err)
+		}
+		dbg := log.New(os.Stderr, "[SETUP] ", log.Ltime)
+		runSetup(cfg, dbg)
+		return
+	}
+
 	debug := flag.Bool("debug", false, "enable debug logging to stderr")
 	flag.Parse()
 
@@ -119,8 +171,24 @@ func main() {
 	}
 	dbg.Printf("keyboard device: %s", dev.Path())
 
+	// Managed server (auto-start if configured and installed)
+	var srv *server.Server
+	if cfg.Server.AutoStart {
+		srv = server.New(&cfg.Server, dbg)
+		if srv.IsInstalled() {
+			dbg.Printf("managed parakeet server is installed, will auto-start")
+		} else {
+			dbg.Printf("managed server not installed (run 'palaver setup' first)")
+			srv = nil
+		}
+	}
+
 	// Create TUI model and program
 	model := tui.NewModel(cfg, trans, chimePlayer, rec, micCheckerAdapter{}, dbg, *debug)
+	model.Server = srv
+	serverCtx, serverCancel := context.WithCancel(context.Background())
+	model.ServerCtx = serverCtx
+	model.ServerCancel = serverCancel
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	// When debug is enabled, redirect logger output into the TUI debug panel
@@ -175,4 +243,8 @@ func main() {
 
 	// Clean shutdown
 	cancel()
+	serverCancel()
+	if srv != nil {
+		srv.Stop()
+	}
 }
