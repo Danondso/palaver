@@ -1,0 +1,27 @@
+# Binary (root only)
+/palaver
+
+# Build output
+*.exe
+*.out
+
+# Logs
+*.log
+
+# Models directory (local model files)
+models/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/plans/
