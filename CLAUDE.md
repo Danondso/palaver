@@ -29,6 +29,8 @@ No Makefile, CI, or linting configuration exists — use the standard Go toolcha
 
 Use `--debug` flag for verbose logging: `./palaver --debug`
 
+Use `palaver setup` to download the managed Parakeet server, ONNX Runtime, and model files.
+
 ## System Dependencies
 
 Build: `libportaudio2`, `portaudio19-dev`
@@ -50,6 +52,7 @@ Runtime (Wayland/Cosmic): `wl-clipboard`, `ydotool`, Linux evdev access (user in
 | `tui` | Bubble Tea state machine: Idle → Recording → Transcribing → Idle (+ Error with 5s auto-clear); configurable themes (synthwave, everforest, gruvbox, monochrome) |
 | `clipboard` | Paste: auto-detects X11 vs Wayland; default "type" mode uses xdotool/ydotool direct typing; "clipboard" mode uses clipboard+Ctrl+V (auto-starts ydotoold) |
 | `chime` | Embedded start/stop WAV chimes played via beep library; customizable paths in config |
+| `server` | Managed Parakeet server lifecycle: download, setup, start/stop/restart; auto-starts on launch |
 
 **Data flow:** Hotkey press → record audio → resample → encode WAV → transcribe → paste text
 
@@ -63,3 +66,4 @@ Runtime (Wayland/Cosmic): `wl-clipboard`, `ydotool`, Linux evdev access (user in
 - Default max recording duration: 60 seconds
 - Default paste mode: `type` (direct typing); alternative `clipboard` mode uses Ctrl+V
 - Theme system: 4 built-in themes selectable via config or `t` key at runtime
+- Managed server: auto-start Parakeet on launch; `r` key to restart; `palaver setup` to install

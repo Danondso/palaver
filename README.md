@@ -47,12 +47,22 @@ sudo usermod -aG input $USER
 
 Palaver needs a running transcription server that implements the OpenAI-compatible `POST /v1/audio/transcriptions` endpoint.
 
-#### Option A: NVIDIA Parakeet (Recommended)
+#### Option A: Managed Server (Recommended)
 
-[Parakeet ASR Server](https://github.com/achetronic/parakeet) — NVIDIA Parakeet TDT 0.6B via ONNX, CPU-only, 3.97% WER.
+Palaver can automatically download and manage a local [Parakeet ASR Server](https://github.com/achetronic/parakeet) — NVIDIA Parakeet TDT 0.6B via ONNX, CPU-only, 3.97% WER.
 
 ```bash
-# Download and run
+palaver setup    # downloads parakeet binary, ONNX Runtime, and ~670MB model files
+palaver          # auto-starts the managed server
+```
+
+The managed server stores files in `~/.local/share/palaver/` and auto-starts on launch when `server.auto_start = true` (the default). See the `[server]` config section below.
+
+#### Option B: Manual Parakeet
+
+If you prefer to manage the server yourself:
+
+```bash
 curl -L -o parakeet https://github.com/achetronic/parakeet/releases/latest/download/parakeet-linux-amd64
 chmod +x parakeet
 make models    # downloads ~670MB model
@@ -66,7 +76,7 @@ docker run -d -p 5092:5092 -v $(pwd)/models:/models ghcr.io/achetronic/parakeet:
 
 Palaver defaults to `http://localhost:5092` — works out of the box.
 
-#### Option B: faster-whisper-server
+#### Option C: faster-whisper-server
 
 ```bash
 docker run -p 8000:8000 ghcr.io/speaches-ai/speaches:latest
@@ -74,7 +84,7 @@ docker run -p 8000:8000 ghcr.io/speaches-ai/speaches:latest
 
 Update config: `base_url = "http://localhost:8000"`
 
-#### Option C: whisper.cpp server
+#### Option D: whisper.cpp server
 
 ```bash
 git clone https://github.com/ggml-org/whisper.cpp.git && cd whisper.cpp
@@ -95,9 +105,10 @@ go build -o palaver ./cmd/palaver/
 ```bash
 ./palaver           # normal mode
 ./palaver --debug   # verbose logging to stderr (hotkey events, WAV size, transcription timing, paste status)
+./palaver setup     # download managed Parakeet server, ONNX Runtime, and models
 ```
 
-The TUI displays the current state (idle/recording/transcribing/error), the last transcription, and hotkey info. Press `q` or `Ctrl+C` to quit.
+The TUI displays the current state (idle/recording/transcribing/error), the last transcription, and hotkey info. Press `q` or `Ctrl+C` to quit, `t` to cycle themes, `r` to restart the managed server.
 
 ## Configuration
 
@@ -128,6 +139,11 @@ tls_skip_verify = false                # skip TLS certificate verification (for 
 [paste]
 delay_ms = 50     # delay before paste (ms)
 mode = "type"     # "type" (direct typing, works in terminals) or "clipboard" (Ctrl+V)
+
+[server]
+auto_start = true                       # auto-start managed Parakeet server on launch
+data_dir = ""                           # empty = ~/.local/share/palaver
+port = 5092                             # port for managed server
 ```
 
 ### Custom Chimes
@@ -169,6 +185,7 @@ internal/recorder/            PortAudio capture, resampling, WAV encoding
 internal/transcriber/         Transcriber interface + OpenAI/Command providers
 internal/clipboard/           Paste: direct typing (default) or clipboard+Ctrl+V; X11/Wayland auto-detect
 internal/chime/               Audio chime playback via beep
+internal/server/              Managed Parakeet server lifecycle: download, setup, start/stop/restart
 internal/tui/                 Bubble Tea model + Lip Gloss view
 ```
 
