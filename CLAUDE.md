@@ -47,8 +47,8 @@ Runtime (Wayland/Cosmic): `wl-clipboard`, `ydotool`, Linux evdev access (user in
 | `hotkey` | Global hotkey via Linux evdev; auto-detects keyboard device from `/dev/input/event*` |
 | `recorder` | PortAudio capture → polyphase FIR resampling (48/44.1kHz → 16kHz) → WAV encoding (mono 16-bit PCM) |
 | `transcriber` | `Transcriber` interface with two providers: `openai` (HTTP multipart to `/v1/audio/transcriptions`) and `command` (shell out with `{input}` template) |
-| `tui` | Bubble Tea state machine: Idle → Recording → Transcribing → Idle (+ Error with 5s auto-clear) |
-| `clipboard` | Paste: auto-detects X11 vs Wayland; X11 uses atotto/clipboard+xdotool, Wayland uses wl-copy+ydotool (auto-starts ydotoold) |
+| `tui` | Bubble Tea state machine: Idle → Recording → Transcribing → Idle (+ Error with 5s auto-clear); configurable themes (synthwave, everforest, gruvbox, monochrome) |
+| `clipboard` | Paste: auto-detects X11 vs Wayland; default "type" mode uses xdotool/ydotool direct typing; "clipboard" mode uses clipboard+Ctrl+V (auto-starts ydotoold) |
 | `chime` | Embedded start/stop WAV chimes played via beep library; customizable paths in config |
 
 **Data flow:** Hotkey press → record audio → resample → encode WAV → transcribe → paste text
@@ -59,4 +59,7 @@ Runtime (Wayland/Cosmic): `wl-clipboard`, `ydotool`, Linux evdev access (user in
 - Mutex-protected recording state for thread safety
 - Embedded WAV assets compiled into the binary (`chime/` package uses `//go:embed`)
 - Default transcription endpoint: `http://localhost:5092` (NVIDIA Parakeet / faster-whisper-server)
+- Default transcription model: `whisper-1`
 - Default max recording duration: 60 seconds
+- Default paste mode: `type` (direct typing); alternative `clipboard` mode uses Ctrl+V
+- Theme system: 4 built-in themes selectable via config or `t` key at runtime

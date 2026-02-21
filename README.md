@@ -2,7 +2,7 @@
 
 A voice-to-text transcription tool for Linux. Hold a hotkey, speak, release — your words are transcribed and pasted into the active application.
 
-Built in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for 80s Miami synthwave styling.
+Built in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for styling. Ships with 4 themes: Synthwave (default), Everforest, Gruvbox, and Monochrome — press `t` to cycle or set in config.
 
 ## How It Works
 
@@ -104,6 +104,8 @@ The TUI displays the current state (idle/recording/transcribing/error), the last
 Config is loaded from `~/.config/palaver/config.toml`. If the file doesn't exist, defaults are used.
 
 ```toml
+theme = "synthwave"  # synthwave, everforest, gruvbox, or monochrome
+
 [hotkey]
 key = "KEY_RIGHTCTRL"    # evdev key name (KEY_F12, KEY_SPACE, etc.)
 device = ""              # empty = auto-detect keyboard
@@ -118,7 +120,7 @@ chime_enabled = true        # set to false to disable chimes
 [transcription]
 provider = "openai"                    # "openai" or "command"
 base_url = "http://localhost:5092"     # transcription server URL
-model = "default"                      # model name sent to the server
+model = "whisper-1"                    # model name sent to the server
 timeout_sec = 30                       # transcription request timeout
 command = ""                           # for "command" provider: e.g. "whisper-cpp -f {input}"
 tls_skip_verify = false                # skip TLS certificate verification (for self-signed certs)
@@ -165,7 +167,7 @@ internal/config/              TOML config loading
 internal/hotkey/              evdev global hotkey listener
 internal/recorder/            PortAudio capture, resampling, WAV encoding
 internal/transcriber/         Transcriber interface + OpenAI/Command providers
-internal/clipboard/           Paste: atotto/clipboard+xdotool (X11), wl-copy+ydotool (Wayland)
+internal/clipboard/           Paste: direct typing (default) or clipboard+Ctrl+V; X11/Wayland auto-detect
 internal/chime/               Audio chime playback via beep
 internal/tui/                 Bubble Tea model + Lip Gloss view
 ```
