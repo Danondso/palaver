@@ -2,7 +2,7 @@
 
 A voice-to-text transcription tool for Linux and macOS. Hold a hotkey, speak, release — your words are transcribed and pasted into the active application.
 
-Built in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for styling. Ships with 4 themes: Synthwave (default), Everforest, Gruvbox, and Monochrome — press `t` to cycle or set in config.
+Built in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for styling. Ships with 4 themes: Synthwave (default), Everforest, Gruvbox, and Monochrome — press `t` to cycle or set in config. You can also define custom themes in `config.toml`.
 
 ## How It Works
 
@@ -182,6 +182,27 @@ Config is loaded from `~/.config/palaver/config.toml`. If the file doesn't exist
 # auto_start = true     # auto-start managed server on launch
 # data_dir = ""         # empty = ~/.local/share/palaver
 # port = 5092           # port for managed server
+```
+
+### Custom Themes
+
+Define custom themes with `[[custom_theme]]` blocks and set `theme` to use one. Multiple custom themes can be defined — they are appended to the `t` key cycle after the built-in themes.
+
+```toml
+theme = "bedfellow"
+
+[[custom_theme]]
+name = "bedfellow"
+primary = "#008585"
+secondary = "#74A892"
+accent = "#C7522A"
+error = "#C7522A"
+success = "#74A892"
+warning = "#D97706"
+background = "#1A1611"
+text = "#FEF9E0"
+dimmed = "#535A63"
+separator = "#625647"
 ```
 
 ### Custom Chimes

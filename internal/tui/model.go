@@ -124,6 +124,7 @@ type Model struct {
 
 // NewModel creates a new TUI model.
 func NewModel(cfg *config.Config, t transcriber.Transcriber, c *chime.Player, rec LevelSampler, mc MicChecker, logger *log.Logger, debug bool) Model {
+	RegisterCustomThemes(cfg.CustomThemes)
 	themeName := cfg.Theme
 	applyTheme(LoadTheme(themeName))
 	return Model{
