@@ -110,6 +110,14 @@ go build -o palaver ./cmd/palaver/
 
 The TUI displays the current state (idle/recording/transcribing/error), the last transcription, and hotkey info. Press `q` or `Ctrl+C` to quit, `t` to cycle themes, `r` to restart the managed server.
 
+## Uninstall
+
+```bash
+./uninstall.sh
+```
+
+Removes the binary, managed server data, and optionally the config directory. System packages are not removed.
+
 ## Configuration
 
 Config is loaded from `~/.config/palaver/config.toml`. If the file doesn't exist, defaults are used.

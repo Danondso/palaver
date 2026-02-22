@@ -60,6 +60,10 @@ func (m Model) View() string {
 	b.WriteString(titleStyle.Render(title))
 	b.WriteString("\n")
 	b.WriteString(m.renderStatusBar())
+	if m.statusChecked && !m.BackendOnline && m.serverState != "starting" {
+		b.WriteString("\n")
+		b.WriteString(quitStyle.Render("  Hint: run 'palaver setup' to install a local backend, or set transcription.base_url in config"))
+	}
 	b.WriteString("\n\n")
 
 	// Status / Visualizer

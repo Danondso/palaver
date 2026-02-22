@@ -1,0 +1,16 @@
+version: 2
+
+builds:
+  - main: ./cmd/palaver/
+    binary: palaver
+    goos:
+      - linux
+    goarch:
+      - amd64
+
+archives:
+  - format: tar.gz
+    files:
+      - README.md
+      - LICENSE
+      - uninstall.sh
