@@ -217,15 +217,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.statusCheckCmd()
 
 	case TranscriptionResultMsg:
-		m.LastTranscript = msg.Text
-		m.Logger.Printf("transcription result: %q", msg.Text)
-		if msg.Text == "" {
+		text := msg.Text
+		m.Logger.Printf("transcription result: %q", text)
+		if text == "" {
 			m.State = StateIdle
 			m.Logger.Printf("empty transcription, skipping paste")
 			return m, nil
 		}
+		// Add a leading space between consecutive transcriptions.
+		if m.LastTranscript != "" {
+			text = " " + text
+		}
+		m.LastTranscript = msg.Text
 		m.State = StatePasting
-		return m, m.pasteCmd(msg.Text)
+		return m, m.pasteCmd(text)
 
 	case PasteDoneMsg:
 		if msg.Err != nil {
@@ -339,6 +344,12 @@ func (m Model) statusCheckCmd() tea.Cmd {
 			defer cancel()
 			if models, err := ml.ListModels(ctx); err == nil && len(models) > 0 {
 				modelName = models[0]
+			}
+		}
+		// Fall back to configured model name when ListModels is unavailable
+		if modelName == "" && backendOk {
+			if cm, ok := t.(transcriber.ConfiguredModeler); ok {
+				modelName = cm.ConfiguredModel()
 			}
 		}
 		return StatusCheckMsg{MicDetected: micOk, BackendOnline: backendOk, MicDeviceName: micName, ModelName: modelName}
