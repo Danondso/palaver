@@ -75,7 +75,7 @@ command = "whisper-cpp -f {input}"
 [paste]
 delay_ms = 100
 `
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -197,7 +197,7 @@ text = "#CAF0F8"
 dimmed = "#5C677D"
 separator = "#1B3A4B"
 `
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -231,7 +231,7 @@ func TestLoadPartialOverride(t *testing.T) {
 [hotkey]
 key = "KEY_F5"
 `
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
