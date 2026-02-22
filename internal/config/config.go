@@ -108,6 +108,38 @@ func DefaultDataDir() string {
 	return filepath.Join(home, ".local", "share", "palaver")
 }
 
+// Save writes the config as TOML to the given path, creating parent
+// directories if needed. The write is atomic: data is written to a
+// temporary file and renamed into place so a crash mid-write cannot
+// corrupt the existing config.
+func Save(path string, cfg *Config) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".palaver-config-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+
+	if err := toml.NewEncoder(tmp).Encode(cfg); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
+
 // Load reads the TOML config from path. If the file does not exist,
 // it returns the default config without error.
 func Load(path string) (*Config, error) {

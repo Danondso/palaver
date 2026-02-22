@@ -119,6 +119,51 @@ delay_ms = 100
 	}
 }
 
+func TestSaveRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	cfg := Default()
+	cfg.Theme = "gruvbox"
+	cfg.Transcription.Model = "large-v3"
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load after Save failed: %v", err)
+	}
+
+	if loaded.Theme != "gruvbox" {
+		t.Errorf("expected theme gruvbox, got %s", loaded.Theme)
+	}
+	if loaded.Transcription.Model != "large-v3" {
+		t.Errorf("expected model large-v3, got %s", loaded.Transcription.Model)
+	}
+	if loaded.Hotkey.Key != "KEY_RIGHTCTRL" {
+		t.Errorf("expected default hotkey preserved, got %s", loaded.Hotkey.Key)
+	}
+	if loaded.Audio.TargetSampleRate != 16000 {
+		t.Errorf("expected default sample rate preserved, got %d", loaded.Audio.TargetSampleRate)
+	}
+}
+
+func TestSaveCreatesDirectory(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nested", "dir", "config.toml")
+
+	cfg := Default()
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save failed to create nested dirs: %v", err)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected file to exist at %s: %v", path, err)
+	}
+}
+
 func TestLoadPartialOverride(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
