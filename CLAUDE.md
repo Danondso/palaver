@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Palaver is a Linux voice-to-text tool written in Go. It listens for a global hotkey (via evdev), records audio (via PortAudio), sends it to a transcription backend (OpenAI-compatible API or shell command), and pastes the result into the active application. Supports X11 (xdotool/xclip) and Wayland/Cosmic (wl-copy/ydotool).
+Palaver is a cross-platform (Linux and macOS) voice-to-text tool written in Go. It listens for a global hotkey, records audio (via PortAudio), sends it to a transcription backend (OpenAI-compatible API or shell command), and pastes the result into the active application.
+
+Platform support:
+- **Linux:** Hotkey via evdev, paste via xdotool/xclip (X11) or wl-clipboard/ydotool (Wayland/Cosmic), managed Parakeet server with ONNX Runtime
+- **macOS:** Hotkey via CGEventTap (CGO), paste via pbcopy/osascript, managed whisper-cpp server (via Homebrew)
 
 ## Build & Test Commands
 
@@ -29,30 +33,35 @@ No Makefile, CI, or linting configuration exists — use the standard Go toolcha
 
 Use `--debug` flag for verbose logging: `./palaver --debug`
 
-Use `palaver setup` to download the managed Parakeet server, ONNX Runtime, and model files.
+Use `palaver setup` to download the managed server and model files (Parakeet + ONNX on Linux, whisper model on macOS).
 
 ## System Dependencies
 
-Build: `libportaudio2`, `portaudio19-dev`
-Runtime (X11): `xdotool`, Linux evdev access (user in `input` group)
-Runtime (Wayland/Cosmic): `wl-clipboard`, `ydotool`, Linux evdev access (user in `input` group)
+**Linux:**
+- Build: `libportaudio2`, `portaudio19-dev`
+- Runtime (X11): `xdotool`, evdev access (user in `input` group)
+- Runtime (Wayland/Cosmic): `wl-clipboard`, `ydotool`, evdev access (user in `input` group)
+
+**macOS:**
+- Build/Runtime: `portaudio`, `whisper-cpp` (via Homebrew)
+- Permissions: Accessibility (System Settings > Privacy & Security), Input Monitoring
 
 ## Architecture
 
-**Entry point:** `cmd/palaver/main.go` — loads config, initializes all components, starts the hotkey listener in a goroutine, and runs the Bubble Tea TUI.
+**Entry point:** `cmd/palaver/main.go` — loads config, initializes all components, starts the hotkey listener in a goroutine, and runs the Bubble Tea TUI. Platform-specific entry in `entry_linux.go` / `entry_darwin.go`, hotkey wiring in `hotkey_linux.go` / `hotkey_darwin.go`.
 
 **Internal packages** (`internal/`):
 
 | Package | Role |
 |---------|------|
-| `config` | TOML config from `~/.config/palaver/config.toml` with built-in defaults |
-| `hotkey` | Global hotkey via Linux evdev; auto-detects keyboard device from `/dev/input/event*` |
+| `config` | TOML config from `~/.config/palaver/config.toml` with built-in defaults; platform-specific defaults in `defaults_linux.go` / `defaults_darwin.go` |
+| `hotkey` | Global hotkey listener. Linux: evdev, auto-detects keyboard from `/dev/input/event*`. macOS: CGEventTap via CGO (`cgeventtap_darwin.c`), supports modifier+key and modifier-only combos |
 | `recorder` | PortAudio capture → polyphase FIR resampling (48/44.1kHz → 16kHz) → WAV encoding (mono 16-bit PCM) |
 | `transcriber` | `Transcriber` interface with two providers: `openai` (HTTP multipart to `/v1/audio/transcriptions`) and `command` (shell out with `{input}` template) |
 | `tui` | Bubble Tea state machine: Idle → Recording → Transcribing → Idle (+ Error with 5s auto-clear); configurable themes (synthwave, everforest, gruvbox, monochrome) |
-| `clipboard` | Paste: auto-detects X11 vs Wayland; default "type" mode uses xdotool/ydotool direct typing; "clipboard" mode uses clipboard+Ctrl+V (auto-starts ydotoold) |
+| `clipboard` | Paste text into active application. Linux: auto-detects X11 vs Wayland; "type" mode uses xdotool/ydotool, "clipboard" mode uses clipboard+Ctrl+V. macOS: "clipboard" mode uses pbcopy+Cmd+V via osascript, "type" mode uses osascript keystroke |
 | `chime` | Embedded start/stop WAV chimes played via beep library; customizable paths in config |
-| `server` | Managed Parakeet server lifecycle: download, setup, start/stop/restart; auto-starts on launch |
+| `server` | Managed transcription server lifecycle. Linux: Parakeet (download binary, ONNX Runtime, model files). macOS: whisper-cpp/whisper-server (via Homebrew, downloads ggml model). Both: start/stop/restart, auto-start on launch |
 
 **Data flow:** Hotkey press → record audio → resample → encode WAV → transcribe → paste text
 
@@ -61,9 +70,11 @@ Runtime (Wayland/Cosmic): `wl-clipboard`, `ydotool`, Linux evdev access (user in
 - Interface-based transcription (`transcriber.Transcriber`) with factory function `New(cfg, logger)`
 - Mutex-protected recording state for thread safety
 - Embedded WAV assets compiled into the binary (`chime/` package uses `//go:embed`)
-- Default transcription endpoint: `http://localhost:5092` (NVIDIA Parakeet / faster-whisper-server)
+- Platform-specific code uses Go build tags (`//go:build linux` / `//go:build darwin`)
+- Default transcription endpoint: `http://localhost:5092`
 - Default transcription model: `whisper-1`
 - Default max recording duration: 60 seconds
-- Default paste mode: `type` (direct typing); alternative `clipboard` mode uses Ctrl+V
+- Default hotkey: `KEY_RIGHTCTRL` (Linux), `Cmd+Option` (macOS)
+- Default paste mode: `type` (Linux), `clipboard` (macOS)
 - Theme system: 4 built-in themes selectable via config or `t` key at runtime
-- Managed server: auto-start Parakeet on launch; `r` key to restart; `palaver setup` to install
+- Managed server: auto-start on launch; `r` key to restart; `palaver setup` to install

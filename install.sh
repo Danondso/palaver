@@ -22,8 +22,21 @@ if [ "$OS" = "Darwin" ]; then
         echo "Error: Homebrew is not installed. Install from https://brew.sh"
         exit 1
     fi
-    echo "Installing portaudio via Homebrew..."
-    brew install portaudio
+    BREW_NEEDED=""
+    if ! brew list portaudio &>/dev/null; then
+        BREW_NEEDED="portaudio"
+    else
+        echo "portaudio already installed."
+    fi
+    if ! brew list whisper-cpp &>/dev/null; then
+        BREW_NEEDED="$BREW_NEEDED whisper-cpp"
+    else
+        echo "whisper-cpp already installed."
+    fi
+    if [ -n "$BREW_NEEDED" ]; then
+        echo "Installing$BREW_NEEDED via Homebrew..."
+        brew install $BREW_NEEDED
+    fi
 else
     # Linux
     SESSION_TYPE="${XDG_SESSION_TYPE:-x11}"
@@ -107,7 +120,7 @@ if ! echo "$PATH" | grep -q "${INSTALL_DIR}"; then
 fi
 
 if [ "$OS" = "Darwin" ]; then
-    # macOS: run setup (prints alternative guidance since Parakeet isn't available)
+    # macOS: run setup (downloads whisper model)
     echo
     "${INSTALL_DIR}/palaver" setup
 

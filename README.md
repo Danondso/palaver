@@ -1,12 +1,12 @@
 # Palaver
 
-A voice-to-text transcription tool for Linux. Hold a hotkey, speak, release — your words are transcribed and pasted into the active application.
+A voice-to-text transcription tool for Linux and macOS. Hold a hotkey, speak, release — your words are transcribed and pasted into the active application.
 
 Built in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for styling. Ships with 4 themes: Synthwave (default), Everforest, Gruvbox, and Monochrome — press `t` to cycle or set in config.
 
 ## How It Works
 
-1. Hold the hotkey (default: Right Ctrl)
+1. Hold the hotkey (default: Right Ctrl on Linux, Cmd+Option on macOS)
 2. Speak into your microphone
 3. Release the hotkey
 4. Audio is sent to a local transcription server
@@ -17,6 +17,14 @@ All processing happens locally by default.
 ## Prerequisites
 
 ### System Dependencies
+
+#### macOS
+
+```bash
+brew install portaudio whisper-cpp
+```
+
+#### Linux
 
 ```bash
 # Ubuntu/Debian - core
@@ -34,7 +42,18 @@ sudo apt install wl-clipboard ydotool
 > Cosmic, etc.). Palaver will auto-start `ydotoold` if it is not already running.
 > Your user must have write access to `/dev/uinput` (typically via the `input` group).
 
-### Input Device Permissions
+### Permissions
+
+#### macOS
+
+Palaver needs two macOS permissions (grant in System Settings > Privacy & Security):
+
+1. **Accessibility** — required for pasting text via simulated keystrokes. Add your terminal app (Terminal, iTerm2, etc.) to the list.
+2. **Input Monitoring** — required for global hotkey detection via CGEventTap.
+
+Microphone access is granted automatically on first run.
+
+#### Linux
 
 Palaver uses the Linux evdev subsystem for global hotkey detection. Your user must be in the `input` group:
 
@@ -49,16 +68,19 @@ Palaver needs a running transcription server that implements the OpenAI-compatib
 
 #### Option A: Managed Server (Recommended)
 
-Palaver can automatically download and manage a local [Parakeet ASR Server](https://github.com/achetronic/parakeet) — NVIDIA Parakeet TDT 0.6B via ONNX, CPU-only, 3.97% WER.
+Palaver can automatically download and manage a local transcription server:
+
+- **macOS:** Uses [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (`whisper-server` from Homebrew) with the `ggml-base.en.bin` model (~150MB).
+- **Linux:** Uses [Parakeet ASR Server](https://github.com/achetronic/parakeet) — NVIDIA Parakeet TDT 0.6B via ONNX, CPU-only, 3.97% WER (~670MB model files + ONNX Runtime).
 
 ```bash
-palaver setup    # downloads parakeet binary, ONNX Runtime, and ~670MB model files
+palaver setup    # downloads server (Linux only) and model files
 palaver          # auto-starts the managed server
 ```
 
 The managed server stores files in `~/.local/share/palaver/` and auto-starts on launch when `server.auto_start = true` (the default). See the `[server]` config section below.
 
-#### Option B: Manual Parakeet
+#### Option B: Manual Parakeet (Linux)
 
 If you prefer to manage the server yourself:
 
@@ -116,7 +138,7 @@ The TUI displays the current state (idle/recording/transcribing/error), the last
 ./uninstall.sh
 ```
 
-Removes the binary, managed server data, and optionally the config directory. System packages are not removed.
+Removes the binary, managed server data, and optionally the config directory. System packages (portaudio, whisper-cpp, xdotool, etc.) are not removed.
 
 ## Configuration
 
@@ -126,8 +148,10 @@ Config is loaded from `~/.config/palaver/config.toml`. If the file doesn't exist
 theme = "synthwave"  # synthwave, everforest, gruvbox, or monochrome
 
 [hotkey]
-key = "KEY_RIGHTCTRL"    # evdev key name (KEY_F12, KEY_SPACE, etc.)
-device = ""              # empty = auto-detect keyboard
+# Linux: evdev key name (KEY_RIGHTCTRL, KEY_F12, KEY_SPACE, etc.)
+# macOS: modifier combo (Cmd+Option, Option+Space, Ctrl+F5, etc.)
+key = "KEY_RIGHTCTRL"    # default: KEY_RIGHTCTRL (Linux), Cmd+Option (macOS)
+device = ""              # Linux only: empty = auto-detect keyboard
 
 [audio]
 target_sample_rate = 16000  # resample to this rate for the transcription backend
@@ -145,11 +169,13 @@ command = ""                           # for "command" provider: e.g. "whisper-c
 tls_skip_verify = false                # skip TLS certificate verification (for self-signed certs)
 
 [paste]
-delay_ms = 50     # delay before paste (ms)
-mode = "type"     # "type" (direct typing, works in terminals) or "clipboard" (Ctrl+V)
+delay_ms = 50         # delay before paste (ms)
+mode = "type"         # default: "type" (Linux), "clipboard" (macOS)
+                      # "type" = direct typing (xdotool/ydotool on Linux, osascript keystroke on macOS)
+                      # "clipboard" = clipboard + paste shortcut (Ctrl+V on Linux, Cmd+V on macOS)
 
 [server]
-auto_start = true                       # auto-start managed Parakeet server on launch
+auto_start = true                       # auto-start managed server on launch
 data_dir = ""                           # empty = ~/.local/share/palaver
 port = 5092                             # port for managed server
 ```
@@ -186,15 +212,17 @@ command = "whisper-cpp --model base.en --file {input}"
 ## Architecture
 
 ```
-cmd/palaver/main.go          Entry point, wiring
-internal/config/              TOML config loading
-internal/hotkey/              evdev global hotkey listener
-internal/recorder/            PortAudio capture, resampling, WAV encoding
-internal/transcriber/         Transcriber interface + OpenAI/Command providers
-internal/clipboard/           Paste: direct typing (default) or clipboard+Ctrl+V; X11/Wayland auto-detect
-internal/chime/               Audio chime playback via beep
-internal/server/              Managed Parakeet server lifecycle: download, setup, start/stop/restart
-internal/tui/                 Bubble Tea model + Lip Gloss view
+cmd/palaver/main.go                  Entry point, wiring
+cmd/palaver/entry_{linux,darwin}.go   Platform-specific entry
+cmd/palaver/hotkey_{linux,darwin}.go  Platform-specific hotkey wiring
+internal/config/                      TOML config loading (platform-specific defaults)
+internal/hotkey/                      Global hotkey: evdev (Linux), CGEventTap (macOS)
+internal/recorder/                    PortAudio capture, resampling, WAV encoding
+internal/transcriber/                 Transcriber interface + OpenAI/Command providers
+internal/clipboard/                   Paste: xdotool/ydotool (Linux), pbcopy/osascript (macOS)
+internal/chime/                       Audio chime playback via beep
+internal/server/                      Managed server: Parakeet (Linux), whisper-cpp (macOS)
+internal/tui/                         Bubble Tea model + Lip Gloss view
 ```
 
 ## Audio Resampling
