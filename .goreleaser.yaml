@@ -12,14 +12,6 @@ builds:
     goarch:
       - amd64
 
-  - id: darwin-amd64
-    main: ./cmd/palaver/
-    binary: palaver
-    goos:
-      - darwin
-    goarch:
-      - amd64
-
   - id: darwin-arm64
     main: ./cmd/palaver/
     binary: palaver
