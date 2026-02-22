@@ -40,11 +40,13 @@ func pasteClipboard(text string) error {
 		return fmt.Errorf("osascript Cmd+V: %w (grant Accessibility permissions in System Settings > Privacy & Security)", err)
 	}
 
-	// Clear clipboard after a short delay (best-effort)
+	// Clear clipboard after a short delay (best-effort).
+	// Error is intentionally ignored: clearing is a courtesy, and failure
+	// (e.g. pbcopy not found) should not prevent a successful paste.
 	time.Sleep(100 * time.Millisecond)
 	clearCmd := exec.Command("pbcopy")
 	clearCmd.Stdin = strings.NewReader("")
-	clearCmd.Run()
+	_ = clearCmd.Run()
 
 	return nil
 }
@@ -60,8 +62,14 @@ func typeAppleScript(text string) error {
 }
 
 // escapeAppleScript escapes a string for use inside AppleScript double quotes.
+// Handles backslashes, double quotes, and control characters that could break
+// out of the string literal or execute unintended AppleScript.
 func escapeAppleScript(s string) string {
 	s = strings.ReplaceAll(s, "\\", "\\\\")
 	s = strings.ReplaceAll(s, "\"", "\\\"")
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	s = strings.ReplaceAll(s, "\r", "\\r")
+	s = strings.ReplaceAll(s, "\t", "\\t")
+	s = strings.ReplaceAll(s, "\b", "")
 	return s
 }

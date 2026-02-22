@@ -14,6 +14,12 @@ func TestEscapeAppleScript(t *testing.T) {
 		{"double quotes", `say "hello"`, `say \"hello\"`},
 		{"backslash", `path\to\file`, `path\\to\\file`},
 		{"both", `"hello\world"`, `\"hello\\world\"`},
+		{"newline", "hello\nworld", `hello\nworld`},
+		{"carriage return", "hello\rworld", `hello\rworld`},
+		{"tab", "hello\tworld", `hello\tworld`},
+		{"backspace stripped", "hello\bworld", "helloworld"},
+		{"multiline with quotes", "line1\nline2 \"quoted\"\nline3", `line1\nline2 \"quoted\"\nline3`},
+		{"injection attempt", `hello" & do shell script "rm -rf ~" & "`, `hello\" & do shell script \"rm -rf ~\" & \"`},
 		{"empty", "", ""},
 	}
 
@@ -28,5 +34,5 @@ func TestEscapeAppleScript(t *testing.T) {
 }
 
 func TestPasteTextRequiresAccessibility(t *testing.T) {
-	t.Log("clipboard.PasteText requires Accessibility permissions for full testing")
+	t.Skip("requires Accessibility permissions in System Settings > Privacy & Security")
 }
