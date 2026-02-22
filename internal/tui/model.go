@@ -34,6 +34,7 @@ const (
 	StateIdle State = iota
 	StateRecording
 	StateTranscribing
+	StatePasting
 	StateError
 )
 
@@ -52,6 +53,8 @@ type TranscriptionResultMsg struct {
 type TranscriptionErrorMsg struct {
 	Err error
 }
+
+type PasteDoneMsg struct{ Err error }
 
 type errorTimeoutMsg struct{}
 
@@ -151,6 +154,15 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// During pasting, simulated keystrokes from xdotool/ydotool may
+		// feed back into the TUI. Only allow ctrl+c to avoid unintended
+		// theme toggles, quits, etc.
+		if m.State == StatePasting {
+			if msg.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -205,14 +217,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.statusCheckCmd()
 
 	case TranscriptionResultMsg:
-		m.State = StateIdle
 		m.LastTranscript = msg.Text
 		m.Logger.Printf("transcription result: %q", msg.Text)
 		if msg.Text == "" {
+			m.State = StateIdle
 			m.Logger.Printf("empty transcription, skipping paste")
 			return m, nil
 		}
+		m.State = StatePasting
 		return m, m.pasteCmd(msg.Text)
+
+	case PasteDoneMsg:
+		if msg.Err != nil {
+			m.State = StateError
+			m.LastError = msg.Err.Error()
+			return m, scheduleErrorTimeout()
+		}
+		m.State = StateIdle
+		return m, nil
 
 	case TranscriptionErrorMsg:
 		m.State = StateError
@@ -272,10 +294,10 @@ func (m Model) pasteCmd(text string) tea.Cmd {
 		logger.Printf("paste: mode=%s delay=%dms", mode, delayMs)
 		if err := clipboard.PasteText(text, delayMs, mode); err != nil {
 			logger.Printf("paste error: %v", err)
-			return TranscriptionErrorMsg{Err: fmt.Errorf("paste: %w", err)}
+			return PasteDoneMsg{Err: fmt.Errorf("paste: %w", err)}
 		}
 		logger.Printf("paste: success")
-		return nil
+		return PasteDoneMsg{}
 	}
 }
 

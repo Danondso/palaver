@@ -83,8 +83,8 @@ func TestTranscriptionResultTransition(t *testing.T) {
 	m.State = StateTranscribing
 	updated, _ := m.Update(TranscriptionResultMsg{Text: "hello world"})
 	model := updated.(Model)
-	if model.State != StateIdle {
-		t.Errorf("expected StateIdle, got %d", model.State)
+	if model.State != StatePasting {
+		t.Errorf("expected StatePasting, got %d", model.State)
 	}
 	if model.LastTranscript != "hello world" {
 		t.Errorf("expected 'hello world', got %q", model.LastTranscript)

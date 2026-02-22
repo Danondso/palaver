@@ -221,6 +221,8 @@ func (m Model) renderBadge() string {
 		return recordingBadge.Render("● Recording...")
 	case StateTranscribing:
 		return transcribingBadge.Render("● Transcribing...")
+	case StatePasting:
+		return transcribingBadge.Render("● Pasting...")
 	case StateError:
 		errText := m.LastError
 		if len(errText) > 50 {
