@@ -41,6 +41,11 @@ func NewOpenAI(baseURL, model string, timeoutSec int, tlsSkipVerify bool, logger
 	}
 }
 
+// ConfiguredModel returns the model name from config.
+func (o *OpenAI) ConfiguredModel() string {
+	return o.model
+}
+
 // Ping checks if the transcription backend is reachable.
 func (o *OpenAI) Ping(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)

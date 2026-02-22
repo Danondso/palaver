@@ -9,14 +9,12 @@ import (
 	"net/url"
 	"os"
 	"sync"
-	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gordonklaus/portaudio"
 
 	"github.com/Danondso/palaver/internal/chime"
 	"github.com/Danondso/palaver/internal/config"
-	"github.com/Danondso/palaver/internal/hotkey"
 	"github.com/Danondso/palaver/internal/recorder"
 	"github.com/Danondso/palaver/internal/server"
 	"github.com/Danondso/palaver/internal/transcriber"
@@ -33,6 +31,16 @@ func (micCheckerAdapter) MicAvailable() bool {
 
 func (micCheckerAdapter) MicName() string {
 	return recorder.MicName()
+}
+
+func handleSetup() {
+	cfgPath := config.DefaultPath()
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+	dbg := log.New(os.Stderr, "[SETUP] ", log.Ltime)
+	runSetup(cfg, dbg)
 }
 
 func runSetup(cfg *config.Config, dbg *log.Logger) {
@@ -57,33 +65,29 @@ func runSetup(cfg *config.Config, dbg *log.Logger) {
 	fmt.Println()
 	fmt.Println()
 
-	// Verify the server starts
-	fmt.Println("Starting server to verify installation...")
-	ctx, cancel := context.WithCancel(context.Background())
-	if err := srv.Start(ctx); err != nil {
+	// Verify the server starts (only if it was installed)
+	if srv.IsInstalled() {
+		fmt.Println("Starting server to verify installation...")
+		ctx, cancel := context.WithCancel(context.Background())
+		if err := srv.Start(ctx); err != nil {
+			cancel()
+			fmt.Printf("Server failed to start: %v\n", err)
+			fmt.Println("Check the error above. If ONNX Runtime is still missing, the download may have failed.")
+			os.Exit(1)
+		}
+		fmt.Println("Server is healthy!")
+		srv.Stop()
 		cancel()
-		fmt.Printf("Server failed to start: %v\n", err)
-		fmt.Println("Check the error above. If ONNX Runtime is still missing, the download may have failed.")
-		os.Exit(1)
 	}
-	fmt.Println("Server is healthy!")
-	srv.Stop()
-	cancel()
 
 	fmt.Println()
 	fmt.Println("Setup complete. Run 'palaver' to start.")
 }
 
-func main() {
+func run() {
 	// Handle setup subcommand before flag parsing
 	if len(os.Args) > 1 && os.Args[1] == "setup" {
-		cfgPath := config.DefaultPath()
-		cfg, err := config.Load(cfgPath)
-		if err != nil {
-			log.Fatalf("load config: %v", err)
-		}
-		dbg := log.New(os.Stderr, "[SETUP] ", log.Ltime)
-		runSetup(cfg, dbg)
+		handleSetup()
 		return
 	}
 
@@ -105,30 +109,11 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	// Suppress ALSA/JACK noise during PortAudio init by redirecting stderr
-	stderrFd := int(os.Stderr.Fd())
-	savedStderr, err := syscall.Dup(stderrFd)
-	if err != nil {
-		log.Fatalf("dup stderr: %v", err)
-	}
-	devNull, err := os.Open(os.DevNull)
-	if err != nil {
-		log.Fatalf("open /dev/null: %v", err)
-	}
-	syscall.Dup2(int(devNull.Fd()), stderrFd)
-	devNull.Close()
-
-	if err := portaudio.Initialize(); err != nil {
-		// Restore stderr before logging
-		syscall.Dup2(savedStderr, stderrFd)
-		syscall.Close(savedStderr)
+	// Initialize PortAudio (Linux suppresses ALSA/JACK stderr noise)
+	if err := initPortAudio(); err != nil {
 		log.Fatalf("portaudio init: %v", err)
 	}
 	defer portaudio.Terminate()
-
-	// Restore stderr
-	syscall.Dup2(savedStderr, stderrFd)
-	syscall.Close(savedStderr)
 
 	dbg.Printf("portaudio initialized")
 
@@ -157,19 +142,12 @@ func main() {
 		log.Fatalf("create recorder: %v", err)
 	}
 
-	// Resolve hotkey
-	keyCode, err := hotkey.KeyCodeFromName(cfg.Hotkey.Key)
+	// Create hotkey listener (platform-specific)
+	listener, err := createListener(cfg, dbg)
 	if err != nil {
-		log.Fatalf("resolve hotkey: %v", err)
+		log.Fatalf("create hotkey listener: %v", err)
 	}
-	dbg.Printf("hotkey: %s (code=%d)", cfg.Hotkey.Key, keyCode)
-
-	// Find keyboard device
-	dev, err := hotkey.FindKeyboard(cfg.Hotkey.Device)
-	if err != nil {
-		log.Fatalf("find keyboard: %v", err)
-	}
-	dbg.Printf("keyboard device: %s", dev.Path())
+	dbg.Printf("hotkey: %s", listener.KeyName())
 
 	// Managed server (auto-start if configured and installed)
 	var srv *server.Server
@@ -197,17 +175,16 @@ func main() {
 	}
 
 	// Hotkey listener
-	listener := hotkey.NewListener(dev)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	var recMu sync.Mutex
 
 	go func() {
-		err := listener.Start(ctx, keyCode,
+		err := listener.Start(ctx,
 			// onDown: start recording
 			func() {
-				dbg.Printf("hotkey down: %s", cfg.Hotkey.Key)
+				dbg.Printf("hotkey down: %s", listener.KeyName())
 				recMu.Lock()
 				defer recMu.Unlock()
 				if err := rec.Start(); err != nil {
@@ -218,7 +195,7 @@ func main() {
 			},
 			// onUp: stop recording, send WAV data
 			func() {
-				dbg.Printf("hotkey up: %s", cfg.Hotkey.Key)
+				dbg.Printf("hotkey up: %s", listener.KeyName())
 				recMu.Lock()
 				defer recMu.Unlock()
 				wavData, truncated, err := rec.Stop()

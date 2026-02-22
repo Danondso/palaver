@@ -61,7 +61,7 @@ func Default() *Config {
 	return &Config{
 		Theme: "synthwave",
 		Hotkey: HotkeyConfig{
-			Key:    "KEY_RIGHTCTRL",
+			Key:    defaultHotkeyKey,
 			Device: "",
 		},
 		Audio: AudioConfig{
@@ -80,7 +80,7 @@ func Default() *Config {
 		},
 		Paste: PasteConfig{
 			DelayMs: 50,
-			Mode:    "type",
+			Mode:    defaultPasteMode,
 		},
 		Server: ServerConfig{
 			AutoStart: true,

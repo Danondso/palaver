@@ -12,43 +12,36 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
+
+// downloadClient is a shared HTTP client with a timeout for all download operations.
+// The 10-minute timeout accommodates large model files on slower connections.
+var downloadClient = &http.Client{
+	Timeout: 10 * time.Minute,
+}
 
 // ProgressFunc is called during downloads with the stage name and bytes downloaded/total.
 type ProgressFunc func(stage string, downloaded, total int64)
-
-// parakeetBinaryURL returns the GitHub release URL for the parakeet binary.
-func parakeetBinaryURL() string {
-	arch := runtime.GOARCH
-	goos := runtime.GOOS
-	if goos != "linux" {
-		goos = "linux" // only linux supported for now
-	}
-	return fmt.Sprintf(
-		"https://github.com/achetronic/parakeet/releases/latest/download/parakeet-%s-%s",
-		goos, arch,
-	)
-}
-
-// modelFileURLs returns a map of filename → HuggingFace download URL for the
-// INT8-quantized Parakeet TDT 0.6B v2 ONNX model files.
-func modelFileURLs() map[string]string {
-	base := "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main"
-	return map[string]string{
-		"config.json":                   base + "/config.json",
-		"vocab.txt":                     base + "/vocab.txt",
-		"encoder-model.int8.onnx":       base + "/encoder-model.int8.onnx",
-		"decoder_joint-model.int8.onnx": base + "/decoder_joint-model.int8.onnx",
-	}
-}
 
 const onnxRuntimeVersion = "1.24.2"
 
 // onnxRuntimeURL returns the GitHub release URL for the ONNX Runtime C library.
 func onnxRuntimeURL() string {
+	var platform string
+	switch runtime.GOOS {
+	case "darwin":
+		if runtime.GOARCH == "arm64" {
+			platform = "osx-arm64"
+		} else {
+			platform = "osx-x86_64"
+		}
+	default:
+		platform = "linux-x64"
+	}
 	return fmt.Sprintf(
-		"https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-linux-x64-%s.tgz",
-		onnxRuntimeVersion, onnxRuntimeVersion,
+		"https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-%s-%s.tgz",
+		onnxRuntimeVersion, platform, onnxRuntimeVersion,
 	)
 }
 
@@ -60,7 +53,7 @@ func downloadFile(url, dest string, progress ProgressFunc, stage string) (string
 		return "", fmt.Errorf("create dir: %w", err)
 	}
 
-	resp, err := http.Get(url)
+	resp, err := downloadClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("download %s: %w", url, err)
 	}
@@ -116,26 +109,6 @@ func downloadFile(url, dest string, progress ProgressFunc, stage string) (string
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-// verifyELF checks that a file starts with the ELF magic bytes, providing
-// a basic integrity check that the downloaded binary is a valid executable.
-func verifyELF(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	magic := make([]byte, 4)
-	if _, err := io.ReadFull(f, magic); err != nil {
-		return fmt.Errorf("read magic bytes: %w", err)
-	}
-	// ELF magic: 0x7f 'E' 'L' 'F'
-	if magic[0] != 0x7f || magic[1] != 'E' || magic[2] != 'L' || magic[3] != 'F' {
-		return fmt.Errorf("not a valid ELF binary (got %x)", magic)
-	}
-	return nil
-}
-
 // downloadAndExtractOnnxRuntime downloads the ONNX Runtime tgz and extracts
 // the lib/ directory contents into destDir.
 func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error {
@@ -144,7 +117,7 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 	}
 
 	url := onnxRuntimeURL()
-	resp, err := http.Get(url)
+	resp, err := downloadClient.Get(url)
 	if err != nil {
 		return fmt.Errorf("download onnxruntime: %w", err)
 	}
@@ -158,7 +131,7 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 	var downloaded int64
 
 	// Wrap body in a counting reader for progress
-	countingReader := &countingReader{
+	cr := &countingReader{
 		r:          resp.Body,
 		total:      total,
 		progress:   progress,
@@ -166,7 +139,7 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 		downloaded: &downloaded,
 	}
 
-	gz, err := gzip.NewReader(countingReader)
+	gz, err := gzip.NewReader(cr)
 	if err != nil {
 		return fmt.Errorf("gzip: %w", err)
 	}

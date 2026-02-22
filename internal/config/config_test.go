@@ -9,8 +9,8 @@ import (
 func TestDefaultValues(t *testing.T) {
 	cfg := Default()
 
-	if cfg.Hotkey.Key != "KEY_RIGHTCTRL" {
-		t.Errorf("expected hotkey KEY_RIGHTCTRL, got %s", cfg.Hotkey.Key)
+	if cfg.Hotkey.Key != defaultHotkeyKey {
+		t.Errorf("expected hotkey %s, got %s", defaultHotkeyKey, cfg.Hotkey.Key)
 	}
 	if cfg.Hotkey.Device != "" {
 		t.Errorf("expected empty device, got %s", cfg.Hotkey.Device)
@@ -46,8 +46,8 @@ func TestLoadMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error for missing file, got %v", err)
 	}
-	if cfg.Hotkey.Key != "KEY_RIGHTCTRL" {
-		t.Errorf("expected default hotkey, got %s", cfg.Hotkey.Key)
+	if cfg.Hotkey.Key != defaultHotkeyKey {
+		t.Errorf("expected default hotkey %s, got %s", defaultHotkeyKey, cfg.Hotkey.Key)
 	}
 }
 
@@ -142,8 +142,8 @@ func TestSaveRoundTrip(t *testing.T) {
 	if loaded.Transcription.Model != "large-v3" {
 		t.Errorf("expected model large-v3, got %s", loaded.Transcription.Model)
 	}
-	if loaded.Hotkey.Key != "KEY_RIGHTCTRL" {
-		t.Errorf("expected default hotkey preserved, got %s", loaded.Hotkey.Key)
+	if loaded.Hotkey.Key != defaultHotkeyKey {
+		t.Errorf("expected default hotkey %s preserved, got %s", defaultHotkeyKey, loaded.Hotkey.Key)
 	}
 	if loaded.Audio.TargetSampleRate != 16000 {
 		t.Errorf("expected default sample rate preserved, got %d", loaded.Audio.TargetSampleRate)

@@ -25,6 +25,12 @@ type ModelLister interface {
 	ListModels(ctx context.Context) ([]string, error)
 }
 
+// ConfiguredModeler is optionally implemented by transcribers that can report
+// the configured model name as a fallback when ListModels is unavailable.
+type ConfiguredModeler interface {
+	ConfiguredModel() string
+}
+
 // New creates a Transcriber based on the provider config.
 func New(cfg *config.TranscriptionConfig, logger *log.Logger) (Transcriber, error) {
 	switch cfg.Provider {
