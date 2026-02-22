@@ -142,42 +142,45 @@ Removes the binary, managed server data, and optionally the config directory. Sy
 
 ## Configuration
 
-Config is loaded from `~/.config/palaver/config.toml`. If the file doesn't exist, defaults are used.
+Config is loaded from `~/.config/palaver/config.toml`. If the file doesn't exist, defaults are used. Copy the example below and uncomment the settings you want to change:
 
 ```toml
-theme = "synthwave"  # synthwave, everforest, gruvbox, or monochrome
+# ~/.config/palaver/config.toml
+
+# Theme: synthwave (default), everforest, gruvbox, or monochrome
+# theme = "synthwave"
 
 [hotkey]
 # Linux: evdev key name (KEY_RIGHTCTRL, KEY_F12, KEY_SPACE, etc.)
 # macOS: modifier combo (Cmd+Option, Option+Space, Ctrl+F5, etc.)
-key = "KEY_RIGHTCTRL"    # default: KEY_RIGHTCTRL (Linux), Cmd+Option (macOS)
-device = ""              # Linux only: empty = auto-detect keyboard
+# key = "KEY_RIGHTCTRL"    # default: KEY_RIGHTCTRL (Linux), Cmd+Option (macOS)
+# device = ""              # Linux only: empty = auto-detect keyboard
 
 [audio]
-target_sample_rate = 16000  # resample to this rate for the transcription backend
-max_duration_sec = 60       # auto-stop recording after this many seconds
-chime_start = ""            # path to custom start chime WAV (empty = built-in)
-chime_stop = ""             # path to custom stop chime WAV (empty = built-in)
-chime_enabled = true        # set to false to disable chimes
+# target_sample_rate = 16000  # resample to this rate for the transcription backend
+# max_duration_sec = 60       # auto-stop recording after this many seconds
+# chime_enabled = true        # set to false to disable chimes
+# chime_start = ""            # path to custom start chime WAV (empty = built-in)
+# chime_stop = ""             # path to custom stop chime WAV (empty = built-in)
 
 [transcription]
-provider = "openai"                    # "openai" or "command"
-base_url = "http://localhost:5092"     # transcription server URL
-model = "whisper-1"                    # model name sent to the server
-timeout_sec = 30                       # transcription request timeout
-command = ""                           # for "command" provider: e.g. "whisper-cpp -f {input}"
-tls_skip_verify = false                # skip TLS certificate verification (for self-signed certs)
+# provider = "openai"                    # "openai" or "command"
+# base_url = "http://localhost:5092"     # transcription server URL
+# model = "whisper-1"                    # model name sent to the server
+# timeout_sec = 30                       # transcription request timeout
+# command = ""                           # for "command" provider: e.g. "whisper-cpp -f {input}"
+# tls_skip_verify = false                # skip TLS cert verification (for self-signed certs)
 
 [paste]
-delay_ms = 50         # delay before paste (ms)
-mode = "type"         # default: "type" (Linux), "clipboard" (macOS)
-                      # "type" = direct typing (xdotool/ydotool on Linux, osascript keystroke on macOS)
-                      # "clipboard" = clipboard + paste shortcut (Ctrl+V on Linux, Cmd+V on macOS)
+# mode = "type"         # default: "type" (Linux), "clipboard" (macOS)
+#                       # "type" = direct typing (xdotool/ydotool on Linux, osascript keystroke on macOS)
+#                       # "clipboard" = clipboard + paste shortcut (Ctrl+V on Linux, Cmd+V on macOS)
+# delay_ms = 50         # delay before paste (ms)
 
 [server]
-auto_start = true                       # auto-start managed server on launch
-data_dir = ""                           # empty = ~/.local/share/palaver
-port = 5092                             # port for managed server
+# auto_start = true     # auto-start managed server on launch
+# data_dir = ""         # empty = ~/.local/share/palaver
+# port = 5092           # port for managed server
 ```
 
 ### Custom Chimes
