@@ -126,10 +126,12 @@ if [ "$OS" = "Darwin" ]; then
 
     echo
     echo "=== macOS Permissions Required ==="
-    echo "Palaver needs two macOS permissions to work:"
+    echo "Palaver needs these macOS permissions to work:"
     echo "  1. Microphone: Granted automatically on first run"
     echo "  2. Accessibility: System Settings > Privacy & Security > Accessibility"
     echo "     Add your terminal app (Terminal, iTerm2, etc.) to the list."
+    echo "  3. Input Monitoring: System Settings > Privacy & Security > Input Monitoring"
+    echo "     Required for global hotkey detection."
     echo
     echo "=== Installation Complete ==="
     echo "Run 'palaver' to start."

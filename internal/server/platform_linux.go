@@ -18,14 +18,6 @@ func libExtension() string {
 	return ".so"
 }
 
-func libraryPathEnvVar() string {
-	return "LD_LIBRARY_PATH"
-}
-
-func parakeetAvailable() bool {
-	return true
-}
-
 func serverBinaryName() string {
 	return "parakeet"
 }
