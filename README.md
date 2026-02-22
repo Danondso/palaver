@@ -174,7 +174,8 @@ Config is loaded from `~/.config/palaver/config.toml`. If the file doesn't exist
 [paste]
 # mode = "type"         # default: "type" (Linux), "clipboard" (macOS)
 #                       # "type" = direct typing (xdotool/ydotool on Linux, osascript keystroke on macOS)
-#                       # "clipboard" = clipboard + paste shortcut (Ctrl+V on Linux, Cmd+V on macOS)
+#                       # "clipboard" = clipboard + paste shortcut (Cmd+V on macOS only)
+#                       # NOTE: "clipboard" mode does not work on Linux — use "type" instead
 # delay_ms = 50         # delay before paste (ms)
 
 [server]

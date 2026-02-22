@@ -59,7 +59,7 @@ Use `palaver setup` to download the managed server and model files (Parakeet + O
 | `recorder` | PortAudio capture → polyphase FIR resampling (48/44.1kHz → 16kHz) → WAV encoding (mono 16-bit PCM) |
 | `transcriber` | `Transcriber` interface with two providers: `openai` (HTTP multipart to `/v1/audio/transcriptions`) and `command` (shell out with `{input}` template) |
 | `tui` | Bubble Tea state machine: Idle → Recording → Transcribing → Idle (+ Error with 5s auto-clear); configurable themes (synthwave, everforest, gruvbox, monochrome) |
-| `clipboard` | Paste text into active application. Linux: auto-detects X11 vs Wayland; "type" mode uses xdotool/ydotool, "clipboard" mode uses clipboard+Ctrl+V. macOS: "clipboard" mode uses pbcopy+Cmd+V via osascript, "type" mode uses osascript keystroke |
+| `clipboard` | Paste text into active application. Linux: auto-detects X11 vs Wayland; only "type" mode works (xdotool on X11, ydotool on Wayland); "clipboard" mode is broken on Linux. macOS: "clipboard" mode (default) uses pbcopy+Cmd+V via osascript, "type" mode uses osascript keystroke |
 | `chime` | Embedded start/stop WAV chimes played via beep library; customizable paths in config |
 | `server` | Managed transcription server lifecycle. Linux: Parakeet (download binary, ONNX Runtime, model files). macOS: whisper-cpp/whisper-server (via Homebrew, downloads ggml model). Both: start/stop/restart, auto-start on launch |
 
