@@ -1,5 +1,3 @@
-1. create uninstall script
-2. Make a plan to include the backend setup as part of the application, we should create an install script that will pull parakeet, make the models, run the server, and show status on the terminal ui. With hotkeys to retest and restart, if needed. If we have to go so far as to make an install script to put all this together, that is also fine. Palaver should just be a command that you can run in any terminal instance. You shouldn't have to be in the GetHub remote to do it.
-2. Make this mac compatible
-3. Add setting persistence for settings like the theme, and the model
-4. add model selection
+1. Make this mac compatible
+2. Add setting persistence for settings like the theme, and the model
+3. add model selection
