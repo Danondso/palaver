@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/Danondso/palaver/internal/config"
@@ -16,11 +17,11 @@ func TestNewResolvesDefaultDataDir(t *testing.T) {
 	srv := New(cfg, logger)
 
 	expected := config.DefaultDataDir()
-	if filepath.Dir(srv.BinaryPath) != expected {
-		t.Errorf("BinaryPath parent = %q, want %q", filepath.Dir(srv.BinaryPath), expected)
+	if srv.ModelsDir != filepath.Join(expected, "models") {
+		t.Errorf("ModelsDir = %q, want %q", srv.ModelsDir, filepath.Join(expected, "models"))
 	}
-	if filepath.Dir(srv.ModelsDir) != expected {
-		t.Errorf("ModelsDir parent = %q, want %q", filepath.Dir(srv.ModelsDir), expected)
+	if srv.OnnxDir != filepath.Join(expected, "onnxruntime") {
+		t.Errorf("OnnxDir = %q, want %q", srv.OnnxDir, filepath.Join(expected, "onnxruntime"))
 	}
 }
 
@@ -29,8 +30,10 @@ func TestNewUsesCustomDataDir(t *testing.T) {
 	logger := log.New(io.Discard, "", 0)
 	srv := New(cfg, logger)
 
-	if srv.BinaryPath != "/tmp/palaver-test/parakeet" {
-		t.Errorf("BinaryPath = %q, want /tmp/palaver-test/parakeet", srv.BinaryPath)
+	if runtime.GOOS == "linux" {
+		if srv.BinaryPath != "/tmp/palaver-test/parakeet" {
+			t.Errorf("BinaryPath = %q, want /tmp/palaver-test/parakeet", srv.BinaryPath)
+		}
 	}
 	if srv.ModelsDir != "/tmp/palaver-test/models" {
 		t.Errorf("ModelsDir = %q, want /tmp/palaver-test/models", srv.ModelsDir)
@@ -56,27 +59,40 @@ func TestIsInstalledTrueWhenPresent(t *testing.T) {
 	logger := log.New(io.Discard, "", 0)
 	srv := New(cfg, logger)
 
-	// Create the binary
-	if err := os.WriteFile(srv.BinaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// Create the model dir and encoder file
-	if err := os.MkdirAll(srv.ModelsDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srv.ModelsDir, "encoder-model.int8.onnx"), []byte("fake"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// Create the onnxruntime dir and lib
-	if err := os.MkdirAll(srv.OnnxDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(srv.OnnxDir, "libonnxruntime"+libExtension()), []byte("fake"), 0o644); err != nil {
-		t.Fatal(err)
+	if runtime.GOOS == "darwin" {
+		// On macOS, BinaryPath is from PATH (whisper-server).
+		// Override it to a temp file so we can test IsInstalled.
+		srv.BinaryPath = filepath.Join(dir, "whisper-server")
+		if err := os.WriteFile(srv.BinaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(srv.ModelsDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(srv.ModelsDir, "ggml-base.en.bin"), []byte("fake"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		// Linux: binary + encoder model + onnxruntime
+		if err := os.WriteFile(srv.BinaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(srv.ModelsDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(srv.ModelsDir, "encoder-model.int8.onnx"), []byte("fake"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(srv.OnnxDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(srv.OnnxDir, "libonnxruntime"+libExtension()), []byte("fake"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if !srv.IsInstalled() {
-		t.Error("IsInstalled() = false when binary, model, and onnxruntime exist")
+		t.Error("IsInstalled() = false when all required files exist")
 	}
 }
 

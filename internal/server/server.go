@@ -15,11 +15,11 @@ import (
 	"github.com/Danondso/palaver/internal/config"
 )
 
-// Server manages the lifecycle of a bundled Parakeet transcription server.
+// Server manages the lifecycle of a managed transcription server.
 type Server struct {
 	BinaryPath string
 	ModelsDir  string
-	OnnxDir    string // directory containing libonnxruntime.so
+	OnnxDir    string // directory containing libonnxruntime (Linux only)
 	Port       int
 	Logger     *log.Logger
 
@@ -34,7 +34,7 @@ func New(cfg *config.ServerConfig, logger *log.Logger) *Server {
 		dataDir = config.DefaultDataDir()
 	}
 	return &Server{
-		BinaryPath: filepath.Join(dataDir, "parakeet"),
+		BinaryPath: resolveServerBinary(dataDir),
 		ModelsDir:  filepath.Join(dataDir, "models"),
 		OnnxDir:    filepath.Join(dataDir, "onnxruntime"),
 		Port:       cfg.Port,
@@ -42,15 +42,12 @@ func New(cfg *config.ServerConfig, logger *log.Logger) *Server {
 	}
 }
 
-// IsInstalled returns true if the binary, encoder model, and ONNX Runtime exist.
+// IsInstalled returns true if the server binary and required model files exist.
 func (s *Server) IsInstalled() bool {
-	if _, err := os.Stat(s.BinaryPath); err != nil {
+	if !isServerInstalled(s.BinaryPath, s.ModelsDir) {
 		return false
 	}
-	if _, err := os.Stat(filepath.Join(s.ModelsDir, "encoder-model.int8.onnx")); err != nil {
-		return false
-	}
-	if !s.onnxRuntimeAvailable() {
+	if needsOnnxRuntime() && !s.onnxRuntimeAvailable() {
 		return false
 	}
 	return true
@@ -68,61 +65,12 @@ func (s *Server) onnxRuntimeAvailable() bool {
 	return systemOnnxRuntimeAvailable()
 }
 
-// Setup downloads the Parakeet binary and model files if they are missing.
-// On platforms where Parakeet is not available, it prints guidance and returns nil.
+// Setup downloads server dependencies if they are missing.
 func (s *Server) Setup(progress ProgressFunc) error {
-	if !parakeetAvailable() {
-		s.Logger.Printf("Parakeet is not available on this platform.")
-		s.Logger.Printf("For local transcription on macOS, consider:")
-		s.Logger.Printf("  - whisper.cpp: https://github.com/ggerganov/whisper.cpp")
-		s.Logger.Printf("  - Speaches (Docker): https://github.com/speaches-ai/speaches")
-		s.Logger.Printf("For cloud transcription, configure a provider in config.toml:")
-		s.Logger.Printf("  - Groq: base_url = \"https://api.groq.com/openai\"")
-		return nil
-	}
-
-	// Download binary
-	if _, err := os.Stat(s.BinaryPath); os.IsNotExist(err) {
-		s.Logger.Printf("downloading parakeet binary...")
-		url := parakeetBinaryURL()
-		checksum, err := downloadFile(url, s.BinaryPath, progress, "binary")
-		if err != nil {
-			return fmt.Errorf("download parakeet binary: %w", err)
-		}
-		s.Logger.Printf("binary SHA256: %s", checksum)
-		if err := verifyBinary(s.BinaryPath); err != nil {
-			os.Remove(s.BinaryPath)
-			return fmt.Errorf("downloaded binary is invalid: %w", err)
-		}
-		if err := os.Chmod(s.BinaryPath, 0o755); err != nil {
-			return fmt.Errorf("chmod parakeet binary: %w", err)
-		}
-	}
-
-	// Download models
-	models := modelFileURLs()
-	for filename, url := range models {
-		dest := filepath.Join(s.ModelsDir, filename)
-		if _, err := os.Stat(dest); os.IsNotExist(err) {
-			s.Logger.Printf("downloading model file: %s", filename)
-			if _, err := downloadFile(url, dest, progress, filename); err != nil {
-				return fmt.Errorf("download model %s: %w", filename, err)
-			}
-		}
-	}
-
-	// Download ONNX Runtime if not available
-	if !s.onnxRuntimeAvailable() {
-		s.Logger.Printf("downloading ONNX Runtime %s...", onnxRuntimeVersion)
-		if err := downloadAndExtractOnnxRuntime(s.OnnxDir, progress); err != nil {
-			return fmt.Errorf("download onnxruntime: %w", err)
-		}
-	}
-
-	return nil
+	return setupServer(s.BinaryPath, s.ModelsDir, s.OnnxDir, s.Logger, progress)
 }
 
-// Start spawns the Parakeet server process and waits for it to become healthy.
+// Start spawns the server process and waits for it to become healthy.
 func (s *Server) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -131,32 +79,26 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("server already running (pid %d)", s.cmd.Process.Pid)
 	}
 
-	s.Logger.Printf("starting parakeet on port %d", s.Port)
+	s.Logger.Printf("starting %s on port %d", serverBinaryName(), s.Port)
 
-	cmd := exec.CommandContext(ctx, s.BinaryPath,
-		"-port", fmt.Sprintf("%d", s.Port),
-		"-models", s.ModelsDir,
-	)
+	cmd := exec.CommandContext(ctx, s.BinaryPath, serverArgs(s.Port, s.ModelsDir)...)
 	cmd.Stdout = s.Logger.Writer()
 	cmd.Stderr = s.Logger.Writer()
 
-	// Set ONNXRUNTIME_LIB so parakeet can find bundled ONNX Runtime,
-	// and the platform library path as fallback for dynamic linker resolution.
-	onnxLib := filepath.Join(s.OnnxDir, "libonnxruntime"+libExtension())
-	libPathVar := libraryPathEnvVar()
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("ONNXRUNTIME_LIB=%s", onnxLib),
-		fmt.Sprintf("%s=%s:%s", libPathVar, s.OnnxDir, os.Getenv(libPathVar)),
-	)
+	env := serverEnv(s.OnnxDir)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start parakeet: %w", err)
+		return fmt.Errorf("start %s: %w", serverBinaryName(), err)
 	}
 	s.cmd = cmd
 
-	// Wait for server to become healthy (up to 120s for model loading)
-	healthURL := fmt.Sprintf("http://localhost:%d/v1/models", s.Port)
-	deadline := time.Now().Add(120 * time.Second)
+	// Wait for server to become healthy
+	healthURL := healthCheckURL(s.Port)
+	timeout := healthCheckTimeout()
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
@@ -167,13 +109,13 @@ func (s *Server) Start(ctx context.Context) error {
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
-				s.Logger.Printf("parakeet is ready")
+				s.Logger.Printf("%s", serverReadyLog())
 				return nil
 			}
 		}
 	}
 
-	return fmt.Errorf("parakeet did not become healthy within 120s")
+	return fmt.Errorf("%s did not become healthy within %s", serverBinaryName(), timeout)
 }
 
 // Stop sends SIGTERM to the server process and waits for it to exit.
@@ -185,7 +127,7 @@ func (s *Server) Stop() error {
 		return nil
 	}
 
-	s.Logger.Printf("stopping parakeet (pid %d)", s.cmd.Process.Pid)
+	s.Logger.Printf("stopping %s (pid %d)", serverBinaryName(), s.cmd.Process.Pid)
 
 	if err := s.cmd.Process.Signal(os.Interrupt); err != nil {
 		// Process may have already exited

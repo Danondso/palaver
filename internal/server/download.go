@@ -12,39 +12,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
+
+// downloadClient is a shared HTTP client with a timeout for all download operations.
+// The 10-minute timeout accommodates large model files on slower connections.
+var downloadClient = &http.Client{
+	Timeout: 10 * time.Minute,
+}
 
 // ProgressFunc is called during downloads with the stage name and bytes downloaded/total.
 type ProgressFunc func(stage string, downloaded, total int64)
-
-// parakeetBinaryURL returns the GitHub release URL for the parakeet binary.
-// Returns empty string if parakeet is not available on this platform.
-func parakeetBinaryURL() string {
-	if !parakeetAvailable() {
-		return ""
-	}
-	arch := runtime.GOARCH
-	goos := runtime.GOOS
-	if goos != "linux" {
-		goos = "linux"
-	}
-	return fmt.Sprintf(
-		"https://github.com/achetronic/parakeet/releases/latest/download/parakeet-%s-%s",
-		goos, arch,
-	)
-}
-
-// modelFileURLs returns a map of filename → HuggingFace download URL for the
-// INT8-quantized Parakeet TDT 0.6B v2 ONNX model files.
-func modelFileURLs() map[string]string {
-	base := "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main"
-	return map[string]string{
-		"config.json":                   base + "/config.json",
-		"vocab.txt":                     base + "/vocab.txt",
-		"encoder-model.int8.onnx":       base + "/encoder-model.int8.onnx",
-		"decoder_joint-model.int8.onnx": base + "/decoder_joint-model.int8.onnx",
-	}
-}
 
 const onnxRuntimeVersion = "1.24.2"
 
@@ -75,7 +53,7 @@ func downloadFile(url, dest string, progress ProgressFunc, stage string) (string
 		return "", fmt.Errorf("create dir: %w", err)
 	}
 
-	resp, err := http.Get(url)
+	resp, err := downloadClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("download %s: %w", url, err)
 	}
@@ -139,7 +117,7 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 	}
 
 	url := onnxRuntimeURL()
-	resp, err := http.Get(url)
+	resp, err := downloadClient.Get(url)
 	if err != nil {
 		return fmt.Errorf("download onnxruntime: %w", err)
 	}
@@ -153,7 +131,7 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 	var downloaded int64
 
 	// Wrap body in a counting reader for progress
-	countingReader := &countingReader{
+	cr := &countingReader{
 		r:          resp.Body,
 		total:      total,
 		progress:   progress,
@@ -161,7 +139,7 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 		downloaded: &downloaded,
 	}
 
-	gz, err := gzip.NewReader(countingReader)
+	gz, err := gzip.NewReader(cr)
 	if err != nil {
 		return fmt.Errorf("gzip: %w", err)
 	}
