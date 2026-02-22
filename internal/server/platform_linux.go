@@ -22,10 +22,6 @@ func serverBinaryName() string {
 	return "parakeet"
 }
 
-func serverBinaryPath() string {
-	return ""
-}
-
 func resolveServerBinary(dataDir string) string {
 	return filepath.Join(dataDir, "parakeet")
 }
@@ -85,7 +81,7 @@ func setupServer(binaryPath, modelsDir, onnxDir string, logger *log.Logger, prog
 			os.Remove(binaryPath)
 			return fmt.Errorf("downloaded binary is invalid: %w", err)
 		}
-		if err := os.Chmod(binaryPath, 0o755); err != nil {
+		if err := os.Chmod(binaryPath, 0o755); err != nil { //nolint:gosec // binary must be executable
 			return fmt.Errorf("chmod parakeet binary: %w", err)
 		}
 	}
@@ -142,7 +138,7 @@ func verifyBinary(path string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	magic := make([]byte, 4)
 	if _, err := io.ReadFull(f, magic); err != nil {

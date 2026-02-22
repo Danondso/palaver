@@ -21,7 +21,7 @@ func TestOpenAITranscribe(t *testing.T) {
 		}
 		if r.Method != http.MethodPost {
 			t.Errorf("unexpected method: %s", r.Method)
-			http.Error(w, "method not allowed", 405)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -41,11 +41,11 @@ func TestOpenAITranscribe(t *testing.T) {
 			http.Error(w, "bad request", 400)
 			return
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		receivedFileData, _ = io.ReadAll(file)
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("  Hello world  "))
+		_, _ = w.Write([]byte("  Hello world  "))
 	}))
 	defer server.Close()
 

@@ -41,8 +41,12 @@ func TestNewWithCustomPaths(t *testing.T) {
 	stopPath := filepath.Join(dir, "custom_stop.wav")
 
 	// Write the embedded defaults as custom files for testing
-	os.WriteFile(startPath, defaultStartWav, 0644)
-	os.WriteFile(stopPath, defaultStopWav, 0644)
+	if err := os.WriteFile(startPath, defaultStartWav, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stopPath, defaultStopWav, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	p, err := New(startPath, stopPath, true, nil)
 	if err != nil {

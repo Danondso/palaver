@@ -28,19 +28,6 @@ func (m *mockLevelSampler) AudioLevel() float64 {
 	return m.level
 }
 
-type mockMicChecker struct {
-	available bool
-	name      string
-}
-
-func (m *mockMicChecker) MicAvailable() bool {
-	return m.available
-}
-
-func (m *mockMicChecker) MicName() string {
-	return m.name
-}
-
 func newTestModel() Model {
 	cfg := config.Default()
 	return NewModel(cfg, &mockTranscriber{result: "test text"}, nil, nil, nil, log.New(io.Discard, "", 0), false)

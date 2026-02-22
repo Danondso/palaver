@@ -77,7 +77,7 @@ func (r *Recorder) Start() error {
 	}
 
 	if err := stream.Start(); err != nil {
-		stream.Close()
+		_ = stream.Close()
 		return fmt.Errorf("start stream: %w", err)
 	}
 
@@ -159,8 +159,8 @@ func (r *Recorder) Stop() ([]byte, bool, error) {
 	}
 
 	if r.stream != nil {
-		r.stream.Stop()
-		r.stream.Close()
+		_ = r.stream.Stop()
+		_ = r.stream.Close()
 		r.stream = nil
 	}
 
@@ -274,7 +274,7 @@ func Resample(samples []int16, inputRate, outputRate float64) ([]int16, error) {
 // by averaging left and right channels.
 func DownmixStereoToMono(stereo []int16) []int16 {
 	mono := make([]int16, len(stereo)/2)
-	for i := 0; i < len(stereo); i += 2 {
+	for i := 0; i+1 < len(stereo); i += 2 {
 		mono[i/2] = int16((int32(stereo[i]) + int32(stereo[i+1])) / 2)
 	}
 	return mono

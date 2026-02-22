@@ -49,28 +49,28 @@ func onnxRuntimeURL() string {
 // It writes to a temporary file first and renames on completion (atomic).
 // Returns the SHA256 hex digest of the downloaded file.
 func downloadFile(url, dest string, progress ProgressFunc, stage string) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o750); err != nil { //nolint:gosec // user data dir
 		return "", fmt.Errorf("create dir: %w", err)
 	}
 
-	resp, err := downloadClient.Get(url)
+	resp, err := downloadClient.Get(url) //nolint:gosec // URL from hardcoded constants
 	if err != nil {
 		return "", fmt.Errorf("download %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
 	}
 
 	tmp := dest + ".tmp"
-	f, err := os.Create(tmp)
+	f, err := os.Create(tmp) //nolint:gosec // path derived from hardcoded constants
 	if err != nil {
 		return "", fmt.Errorf("create temp file: %w", err)
 	}
 	defer func() {
-		f.Close()
-		os.Remove(tmp) // clean up on error; no-op if renamed
+		_ = f.Close()
+		_ = os.Remove(tmp) // clean up on error; no-op if renamed
 	}()
 
 	total := resp.ContentLength
@@ -112,16 +112,16 @@ func downloadFile(url, dest string, progress ProgressFunc, stage string) (string
 // downloadAndExtractOnnxRuntime downloads the ONNX Runtime tgz and extracts
 // the lib/ directory contents into destDir.
 func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error {
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	if err := os.MkdirAll(destDir, 0o750); err != nil { //nolint:gosec // user data dir
 		return fmt.Errorf("create onnx dir: %w", err)
 	}
 
 	url := onnxRuntimeURL()
-	resp, err := downloadClient.Get(url)
+	resp, err := downloadClient.Get(url) //nolint:gosec // URL from hardcoded constants
 	if err != nil {
 		return fmt.Errorf("download onnxruntime: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download onnxruntime: HTTP %d", resp.StatusCode)
@@ -143,7 +143,7 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 	if err != nil {
 		return fmt.Errorf("gzip: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {
@@ -174,7 +174,7 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			continue
 		case tar.TypeSymlink:
 			// Validate symlink target stays within destDir to prevent path traversal
-			target := filepath.Join(destDir, hdr.Linkname)
+			target := filepath.Join(destDir, hdr.Linkname) //nolint:gosec // validated below
 			if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator), filepath.Clean(destDir)+string(os.PathSeparator)) &&
 				filepath.Clean(target) != filepath.Clean(destDir) {
 				return fmt.Errorf("symlink %s target %q escapes destination directory", filename, hdr.Linkname)
@@ -197,10 +197,10 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 				return fmt.Errorf("create %s: %w", filename, err)
 			}
 			if _, err := io.Copy(out, io.LimitReader(tr, limit+1)); err != nil {
-				out.Close()
+				_ = out.Close()
 				return fmt.Errorf("extract %s: %w", filename, err)
 			}
-			out.Close()
+			_ = out.Close()
 		}
 	}
 

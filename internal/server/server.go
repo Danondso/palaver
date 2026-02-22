@@ -81,7 +81,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.Logger.Printf("starting %s on port %d", serverBinaryName(), s.Port)
 
-	cmd := exec.CommandContext(ctx, s.BinaryPath, serverArgs(s.Port, s.ModelsDir)...)
+	cmd := exec.CommandContext(ctx, s.BinaryPath, serverArgs(s.Port, s.ModelsDir)...) //nolint:gosec // binary path from managed install
 	cmd.Stdout = s.Logger.Writer()
 	cmd.Stderr = s.Logger.Writer()
 
@@ -105,9 +105,9 @@ func (s *Server) Start(ctx context.Context) error {
 			return ctx.Err()
 		case <-time.After(500 * time.Millisecond):
 		}
-		resp, err := http.Get(healthURL)
+		resp, err := http.Get(healthURL) //nolint:gosec // URL from hardcoded localhost
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				s.Logger.Printf("%s", serverReadyLog())
 				return nil
@@ -140,7 +140,7 @@ func (s *Server) Stop() error {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		s.cmd.Process.Kill()
+		_ = s.cmd.Process.Kill()
 		<-done
 	}
 
