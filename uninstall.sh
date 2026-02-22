@@ -4,6 +4,8 @@ set -euo pipefail
 echo "=== Palaver Uninstaller ==="
 echo
 
+OS="$(uname -s)"
+
 # Stop any running palaver processes
 if pgrep -x palaver &>/dev/null; then
     echo "Stopping running palaver processes..."
@@ -54,6 +56,10 @@ fi
 echo
 echo "=== Uninstall Complete ==="
 echo "Note: System packages were not removed. Remove them manually if no longer needed:"
-echo "  Audio:          libportaudio2, portaudio19-dev (apt) / portaudio, portaudio-devel (dnf) / portaudio (pacman)"
-echo "  X11 clipboard:  xdotool, xclip"
-echo "  Wayland clipboard: ydotool, wl-clipboard"
+if [ "$OS" = "Darwin" ]; then
+    echo "  Audio: brew uninstall portaudio"
+else
+    echo "  Audio:          libportaudio2, portaudio19-dev (apt) / portaudio, portaudio-devel (dnf) / portaudio (pacman)"
+    echo "  X11 clipboard:  xdotool, xclip"
+    echo "  Wayland clipboard: ydotool, wl-clipboard"
+fi
