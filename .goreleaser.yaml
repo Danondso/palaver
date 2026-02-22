@@ -1,12 +1,32 @@
 version: 2
 
+env:
+  - CGO_ENABLED=1
+
 builds:
-  - main: ./cmd/palaver/
+  - id: linux-amd64
+    main: ./cmd/palaver/
     binary: palaver
     goos:
       - linux
     goarch:
       - amd64
+
+  - id: darwin-amd64
+    main: ./cmd/palaver/
+    binary: palaver
+    goos:
+      - darwin
+    goarch:
+      - amd64
+
+  - id: darwin-arm64
+    main: ./cmd/palaver/
+    binary: palaver
+    goos:
+      - darwin
+    goarch:
+      - arm64
 
 archives:
   - format: tar.gz
@@ -14,3 +34,6 @@ archives:
       - README.md
       - LICENSE
       - uninstall.sh
+
+checksum:
+  name_template: "checksums.txt"
