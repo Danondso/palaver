@@ -116,10 +116,10 @@ type Model struct {
 	ModelName      string
 	statusChecked  bool
 	themeName      string
-	Server       *server.Server      // nil if not using managed server
-	serverState  string              // "", "starting", "running", "stopped", "error"
-	ServerCtx    context.Context     // cancellable context for server operations
-	ServerCancel context.CancelFunc  // cancel function for ServerCtx
+	Server         *server.Server     // nil if not using managed server
+	serverState    string             // "", "starting", "running", "stopped", "error"
+	ServerCtx      context.Context    // cancellable context for server operations
+	ServerCancel   context.CancelFunc // cancel function for ServerCtx
 }
 
 // NewModel creates a new TUI model.

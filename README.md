@@ -1,5 +1,8 @@
 # Palaver
 
+[![CI](https://github.com/Danondso/palaver/actions/workflows/ci.yml/badge.svg)](https://github.com/Danondso/palaver/actions/workflows/ci.yml)
+[![Security](https://github.com/Danondso/palaver/actions/workflows/security.yml/badge.svg)](https://github.com/Danondso/palaver/actions/workflows/security.yml)
+
 A voice-to-text transcription tool for Linux and macOS. Hold a hotkey, speak, release — your words are transcribed and pasted into the active application.
 
 Built in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for the TUI and [Lip Gloss](https://github.com/charmbracelet/lipgloss) for styling. Ships with 4 themes: Synthwave (default), Everforest, Gruvbox, and Monochrome — press `t` to cycle or set in config. You can also define custom themes in `config.toml`.

@@ -417,9 +417,9 @@ func (l *darwinListener) KeyName() string {
 
 // CGEvent type constants.
 const (
-	cgEventKeyDown       = 10 // kCGEventKeyDown
-	cgEventKeyUp         = 11 // kCGEventKeyUp
-	cgEventFlagsChanged  = 12 // kCGEventFlagsChanged
+	cgEventKeyDown      = 10 // kCGEventKeyDown
+	cgEventKeyUp        = 11 // kCGEventKeyUp
+	cgEventFlagsChanged = 12 // kCGEventFlagsChanged
 )
 
 //export hotkeyEventCallback
