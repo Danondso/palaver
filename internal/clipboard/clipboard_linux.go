@@ -68,7 +68,7 @@ func typeWaylandDirect(text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "ydotool", "type", "--delay", "0", "--", text)
+	cmd := exec.CommandContext(ctx, "ydotool", "type", "--delay", "0", "--", text) //nolint:gosec // args are controlled
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("ydotool type: %w", err)
 	}
@@ -82,7 +82,7 @@ func typeX11Direct(text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "xdotool", "type", "--delay", "0", "--", text)
+	cmd := exec.CommandContext(ctx, "xdotool", "type", "--delay", "0", "--", text) //nolint:gosec // args are controlled
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("xdotool type: %w", err)
 	}
@@ -104,7 +104,7 @@ func typeWayland(text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "wl-copy", "--", text)
+	cmd := exec.CommandContext(ctx, "wl-copy", "--", text) //nolint:gosec // args are controlled
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("wl-copy: %w", err)
 	}
@@ -115,7 +115,7 @@ func typeWayland(text string) error {
 
 	// Clear clipboard after paste (best-effort)
 	time.Sleep(100 * time.Millisecond)
-	exec.CommandContext(ctx, "wl-copy", "--clear").Run()
+	_ = exec.CommandContext(ctx, "wl-copy", "--clear").Run()
 
 	return nil
 }
@@ -136,7 +136,7 @@ func pasteX11(text string) error {
 
 	// Clear clipboard after paste (best-effort)
 	time.Sleep(100 * time.Millisecond)
-	atclip.WriteAll("")
+	_ = atclip.WriteAll("")
 
 	return nil
 }

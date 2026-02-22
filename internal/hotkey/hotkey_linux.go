@@ -162,7 +162,7 @@ func FindKeyboard(devicePath string) (*evdev.InputDevice, error) {
 		if isKeyboard(dev) {
 			return dev, nil
 		}
-		dev.Close()
+		_ = dev.Close()
 	}
 
 	return nil, fmt.Errorf("no keyboard device found in /dev/input/event*")
@@ -265,7 +265,7 @@ func (l *linuxListener) Stop() {
 	defer l.mu.Unlock()
 	if !l.closed {
 		l.closed = true
-		l.dev.Close()
+		_ = l.dev.Close()
 	}
 }
 

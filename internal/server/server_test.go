@@ -63,30 +63,30 @@ func TestIsInstalledTrueWhenPresent(t *testing.T) {
 		// On macOS, BinaryPath is from PATH (whisper-server).
 		// Override it to a temp file so we can test IsInstalled.
 		srv.BinaryPath = filepath.Join(dir, "whisper-server")
-		if err := os.WriteFile(srv.BinaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		if err := os.WriteFile(srv.BinaryPath, []byte("#!/bin/sh\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.MkdirAll(srv.ModelsDir, 0o755); err != nil {
+		if err := os.MkdirAll(srv.ModelsDir, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(srv.ModelsDir, "ggml-base.en.bin"), []byte("fake"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(srv.ModelsDir, "ggml-base.en.bin"), []byte("fake"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	} else {
 		// Linux: binary + encoder model + onnxruntime
-		if err := os.WriteFile(srv.BinaryPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		if err := os.WriteFile(srv.BinaryPath, []byte("#!/bin/sh\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.MkdirAll(srv.ModelsDir, 0o755); err != nil {
+		if err := os.MkdirAll(srv.ModelsDir, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(srv.ModelsDir, "encoder-model.int8.onnx"), []byte("fake"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(srv.ModelsDir, "encoder-model.int8.onnx"), []byte("fake"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.MkdirAll(srv.OnnxDir, 0o755); err != nil {
+		if err := os.MkdirAll(srv.OnnxDir, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(srv.OnnxDir, "libonnxruntime"+libExtension()), []byte("fake"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(srv.OnnxDir, "libonnxruntime"+libExtension()), []byte("fake"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -14,14 +14,18 @@ func TestIsWayland(t *testing.T) {
 
 func TestIsWaylandDetection(t *testing.T) {
 	orig := os.Getenv("WAYLAND_DISPLAY")
-	defer os.Setenv("WAYLAND_DISPLAY", orig)
+	defer func() { _ = os.Setenv("WAYLAND_DISPLAY", orig) }()
 
-	os.Setenv("WAYLAND_DISPLAY", "wayland-0")
+	if err := os.Setenv("WAYLAND_DISPLAY", "wayland-0"); err != nil {
+		t.Fatal(err)
+	}
 	if !isWayland() {
 		t.Error("expected isWayland()=true when WAYLAND_DISPLAY is set")
 	}
 
-	os.Unsetenv("WAYLAND_DISPLAY")
+	if err := os.Unsetenv("WAYLAND_DISPLAY"); err != nil {
+		t.Fatal(err)
+	}
 	if isWayland() {
 		t.Error("expected isWayland()=false when WAYLAND_DISPLAY is unset")
 	}

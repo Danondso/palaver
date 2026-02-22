@@ -32,7 +32,7 @@ func createListener(cfg *config.Config, dbg *log.Logger) (hotkey.Listener, error
 // initPortAudio suppresses ALSA/JACK noise during PortAudio initialization
 // by temporarily redirecting stderr to /dev/null, then calls portaudio.Initialize().
 func initPortAudio() error {
-	stderrFd := int(os.Stderr.Fd())
+	stderrFd := int(os.Stderr.Fd()) //nolint:gosec // fd fits in int on all supported platforms
 	savedStderr, err := syscall.Dup(stderrFd)
 	if err != nil {
 		// If we can't dup stderr, just initialize without suppression
@@ -40,17 +40,17 @@ func initPortAudio() error {
 	}
 	devNull, err := os.Open(os.DevNull)
 	if err != nil {
-		syscall.Close(savedStderr)
+		_ = syscall.Close(savedStderr)
 		return portaudio.Initialize()
 	}
-	syscall.Dup2(int(devNull.Fd()), stderrFd)
-	devNull.Close()
+	_ = syscall.Dup2(int(devNull.Fd()), stderrFd)
+	_ = devNull.Close()
 
 	initErr := portaudio.Initialize()
 
 	// Restore stderr
-	syscall.Dup2(savedStderr, stderrFd)
-	syscall.Close(savedStderr)
+	_ = syscall.Dup2(savedStderr, stderrFd)
+	_ = syscall.Close(savedStderr)
 
 	return initErr
 }

@@ -29,7 +29,7 @@ func NewOpenAI(baseURL, model string, timeoutSec int, tlsSkipVerify bool, logger
 	client := &http.Client{}
 	if tlsSkipVerify {
 		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // user-configured opt-in for self-signed certs
 		}
 	}
 	return &OpenAI{
@@ -56,11 +56,11 @@ func (o *OpenAI) Ping(ctx context.Context) error {
 		return fmt.Errorf("build ping request: %w", err)
 	}
 
-	resp, err := o.client.Do(req)
+	resp, err := o.client.Do(req) //nolint:gosec // URL from user config
 	if err != nil {
 		return fmt.Errorf("ping: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	return nil
 }
 
@@ -74,7 +74,7 @@ func (o *OpenAI) ListModels(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("build models request: %w", err)
 	}
 
-	resp, err := o.client.Do(req)
+	resp, err := o.client.Do(req) //nolint:gosec // URL from user config
 	if err != nil {
 		return nil, fmt.Errorf("list models: %w", err)
 	}
@@ -139,7 +139,7 @@ func (o *OpenAI) Transcribe(ctx context.Context, wavData []byte) (string, error)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	start := time.Now()
-	resp, err := o.client.Do(req)
+	resp, err := o.client.Do(req) //nolint:gosec // URL from user config
 	if err != nil {
 		return "", fmt.Errorf("send request: %w", err)
 	}

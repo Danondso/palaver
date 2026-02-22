@@ -76,7 +76,7 @@ func runSetup(cfg *config.Config, dbg *log.Logger) {
 			os.Exit(1)
 		}
 		fmt.Println("Server is healthy!")
-		srv.Stop()
+		_ = srv.Stop()
 		cancel()
 	}
 
@@ -113,7 +113,7 @@ func run() {
 	if err := initPortAudio(); err != nil {
 		log.Fatalf("portaudio init: %v", err)
 	}
-	defer portaudio.Terminate()
+	defer func() { _ = portaudio.Terminate() }()
 
 	dbg.Printf("portaudio initialized")
 
@@ -126,7 +126,7 @@ func run() {
 	// Warn if sending audio over plaintext HTTP to a non-local host
 	if u, err := url.Parse(cfg.Transcription.BaseURL); err == nil {
 		if u.Scheme == "http" && u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1" {
-			log.Printf("WARNING: transcription base_url uses plaintext HTTP to non-local host %q — audio data will be sent unencrypted", u.Hostname())
+			log.Printf("WARNING: transcription base_url uses plaintext HTTP to non-local host %q — audio data will be sent unencrypted", u.Hostname()) //nolint:gosec // log message from trusted config value
 		}
 	}
 
@@ -222,6 +222,6 @@ func run() {
 	cancel()
 	serverCancel()
 	if srv != nil {
-		srv.Stop()
+		_ = srv.Stop()
 	}
 }
