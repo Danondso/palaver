@@ -1,3 +1,5 @@
+//go:build linux
+
 package hotkey
 
 import (
@@ -191,22 +193,24 @@ func isKeyboard(dev *evdev.InputDevice) bool {
 	return hasA && hasZ
 }
 
-// Listener listens for global hotkey press/release events via evdev.
-type Listener struct {
-	dev    *evdev.InputDevice
-	mu     sync.Mutex
-	closed bool
+// linuxListener listens for global hotkey press/release events via evdev.
+type linuxListener struct {
+	dev     *evdev.InputDevice
+	keyCode evdev.EvCode
+	keyName string
+	mu      sync.Mutex
+	closed  bool
 }
 
-// NewListener creates a Listener for the given evdev device.
-func NewListener(dev *evdev.InputDevice) *Listener {
-	return &Listener{dev: dev}
+// NewListener creates a Listener for the given evdev device, key code, and key name.
+func NewListener(dev *evdev.InputDevice, keyCode evdev.EvCode, keyName string) Listener {
+	return &linuxListener{dev: dev, keyCode: keyCode, keyName: keyName}
 }
 
 // Start blocks and reads evdev events, calling onDown on key press and
-// onUp on key release for the specified key code. It returns when the
+// onUp on key release for the configured key code. It returns when the
 // context is cancelled or the device is closed.
-func (l *Listener) Start(ctx context.Context, keyCode evdev.EvCode, onDown func(), onUp func()) error {
+func (l *linuxListener) Start(ctx context.Context, onDown func(), onUp func()) error {
 	errCh := make(chan error, 1)
 
 	go func() {
@@ -228,7 +232,7 @@ func (l *Listener) Start(ctx context.Context, keyCode evdev.EvCode, onDown func(
 				return
 			}
 
-			if ev.Type != evdev.EV_KEY || ev.Code != keyCode {
+			if ev.Type != evdev.EV_KEY || ev.Code != l.keyCode {
 				continue
 			}
 			switch ev.Value {
@@ -256,11 +260,16 @@ func (l *Listener) Start(ctx context.Context, keyCode evdev.EvCode, onDown func(
 }
 
 // Stop closes the evdev device and stops the listener.
-func (l *Listener) Stop() {
+func (l *linuxListener) Stop() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if !l.closed {
 		l.closed = true
 		l.dev.Close()
 	}
+}
+
+// KeyName returns the configured key name string.
+func (l *linuxListener) KeyName() string {
+	return l.keyName
 }
