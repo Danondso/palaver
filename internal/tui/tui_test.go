@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 	"testing"
 
 	"github.com/Danondso/palaver/internal/config"
@@ -220,6 +221,101 @@ func searchString(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestCustomThemeRegistrationAndCycle(t *testing.T) {
+	// Reset theme state to avoid pollution from other tests.
+	// Save and restore themeOrder/themes after the test.
+	origOrder := make([]string, len(themeOrder))
+	copy(origOrder, themeOrder)
+	origThemes := make(map[string]Theme)
+	for k, v := range themes {
+		origThemes[k] = v
+	}
+	defer func() {
+		themeOrder = origOrder
+		themes = origThemes
+	}()
+
+	cfg := config.Default()
+	cfg.Theme = "testcustom"
+	cfg.CustomThemes = []config.CustomTheme{
+		{
+			Name:       "testcustom",
+			Primary:    "#008585",
+			Secondary:  "#74A892",
+			Accent:     "#C7522A",
+			Error:      "#C7522A",
+			Success:    "#74A892",
+			Warning:    "#D97706",
+			Background: "#1A1611",
+			Text:       "#FEF9E0",
+			Dimmed:     "#535A63",
+			Separator:  "#625647",
+		},
+	}
+
+	m := NewModel(cfg, &mockTranscriber{result: "test"}, nil, nil, nil, log.New(io.Discard, "", 0), false)
+
+	// Theme should be loaded and active.
+	if m.themeName != "testcustom" {
+		t.Errorf("expected themeName testcustom, got %s", m.themeName)
+	}
+
+	// The custom theme should be loadable.
+	loaded := LoadTheme("testcustom")
+	if loaded.Name != "testcustom" {
+		t.Errorf("expected loaded theme name testcustom, got %s", loaded.Name)
+	}
+	if string(loaded.Primary) != "#008585" {
+		t.Errorf("expected primary #008585, got %s", string(loaded.Primary))
+	}
+
+	// The custom theme should appear in the cycle.
+	found := false
+	for _, name := range ThemeNames() {
+		if name == "testcustom" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected testcustom to appear in ThemeNames()")
+	}
+
+	// Cycling from monochrome should reach the custom theme.
+	next := NextTheme("monochrome")
+	if strings.ToLower(next.Name) != "testcustom" {
+		t.Errorf("expected NextTheme(monochrome) to be testcustom, got %s", next.Name)
+	}
+}
+
+func TestCustomThemeSkipsBuiltinCollision(t *testing.T) {
+	origOrder := make([]string, len(themeOrder))
+	copy(origOrder, themeOrder)
+	origThemes := make(map[string]Theme)
+	for k, v := range themes {
+		origThemes[k] = v
+	}
+	defer func() {
+		themeOrder = origOrder
+		themes = origThemes
+	}()
+
+	custom := []config.CustomTheme{
+		{Name: "synthwave", Primary: "#FF0000"},
+		{Name: "", Primary: "#FF0000"},
+	}
+	RegisterCustomThemes(custom)
+
+	// Built-in synthwave should not be overridden.
+	if string(themes["synthwave"].Primary) != "#FF6AC1" {
+		t.Error("expected built-in synthwave to be unchanged")
+	}
+	// Theme order should not have grown.
+	if len(themeOrder) != 4 {
+		t.Errorf("expected 4 themes in order, got %d", len(themeOrder))
+	}
 }
 
 func TestAudioLevelTickUpdatesLevel(t *testing.T) {

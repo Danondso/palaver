@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Danondso/palaver/internal/config"
 )
 
 // Theme defines the color palette for the TUI.
@@ -103,6 +105,43 @@ func NextTheme(current string) Theme {
 		}
 	}
 	return themes[themeOrder[0]]
+}
+
+// builtinThemes is the set of theme keys that cannot be overridden by custom themes.
+var builtinThemes = map[string]bool{
+	"synthwave":  true,
+	"everforest": true,
+	"gruvbox":    true,
+	"monochrome": true,
+}
+
+// RegisterCustomThemes converts config custom themes into the internal themes
+// map and appends them to the theme cycle order. Silently skips entries with
+// empty names or names that collide with built-in themes.
+func RegisterCustomThemes(custom []config.CustomTheme) {
+	for _, ct := range custom {
+		key := strings.ToLower(ct.Name)
+		if key == "" || builtinThemes[key] {
+			continue
+		}
+		if _, exists := themes[key]; exists {
+			continue
+		}
+		themes[key] = Theme{
+			Name:       ct.Name,
+			Primary:    lipgloss.Color(ct.Primary),
+			Secondary:  lipgloss.Color(ct.Secondary),
+			Accent:     lipgloss.Color(ct.Accent),
+			Error:      lipgloss.Color(ct.Error),
+			Success:    lipgloss.Color(ct.Success),
+			Warning:    lipgloss.Color(ct.Warning),
+			Background: lipgloss.Color(ct.Background),
+			Text:       lipgloss.Color(ct.Text),
+			Dimmed:     lipgloss.Color(ct.Dimmed),
+			Separator:  lipgloss.Color(ct.Separator),
+		}
+		themeOrder = append(themeOrder, key)
+	}
 }
 
 // applyTheme updates all TUI style variables to use the given theme's colors.

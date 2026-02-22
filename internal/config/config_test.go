@@ -75,7 +75,7 @@ command = "whisper-cpp -f {input}"
 [paste]
 delay_ms = 100
 `
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -164,6 +164,65 @@ func TestSaveCreatesDirectory(t *testing.T) {
 	}
 }
 
+func TestLoadCustomThemes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	content := `
+theme = "bedfellow"
+
+[[custom_theme]]
+name = "bedfellow"
+primary = "#008585"
+secondary = "#74A892"
+accent = "#C7522A"
+error = "#C7522A"
+success = "#74A892"
+warning = "#D97706"
+background = "#1A1611"
+text = "#FEF9E0"
+dimmed = "#535A63"
+separator = "#625647"
+
+[[custom_theme]]
+name = "ocean"
+primary = "#0077B6"
+secondary = "#00B4D8"
+accent = "#90E0EF"
+error = "#E63946"
+success = "#2A9D8F"
+warning = "#E9C46A"
+background = "#03045E"
+text = "#CAF0F8"
+dimmed = "#5C677D"
+separator = "#1B3A4B"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Theme != "bedfellow" {
+		t.Errorf("expected theme bedfellow, got %s", cfg.Theme)
+	}
+	if len(cfg.CustomThemes) != 2 {
+		t.Fatalf("expected 2 custom themes, got %d", len(cfg.CustomThemes))
+	}
+	if cfg.CustomThemes[0].Name != "bedfellow" {
+		t.Errorf("expected first custom theme name bedfellow, got %s", cfg.CustomThemes[0].Name)
+	}
+	if cfg.CustomThemes[0].Primary != "#008585" {
+		t.Errorf("expected primary #008585, got %s", cfg.CustomThemes[0].Primary)
+	}
+	if cfg.CustomThemes[1].Name != "ocean" {
+		t.Errorf("expected second custom theme name ocean, got %s", cfg.CustomThemes[1].Name)
+	}
+}
+
 func TestLoadPartialOverride(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -172,7 +231,7 @@ func TestLoadPartialOverride(t *testing.T) {
 [hotkey]
 key = "KEY_F5"
 `
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

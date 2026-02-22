@@ -46,9 +46,25 @@ type ServerConfig struct {
 	Port      int    `toml:"port"`
 }
 
+// CustomTheme defines a user-provided color theme.
+type CustomTheme struct {
+	Name       string `toml:"name"`
+	Primary    string `toml:"primary"`
+	Secondary  string `toml:"secondary"`
+	Accent     string `toml:"accent"`
+	Error      string `toml:"error"`
+	Success    string `toml:"success"`
+	Warning    string `toml:"warning"`
+	Background string `toml:"background"`
+	Text       string `toml:"text"`
+	Dimmed     string `toml:"dimmed"`
+	Separator  string `toml:"separator"`
+}
+
 // Config is the top-level configuration.
 type Config struct {
 	Theme         string              `toml:"theme"`
+	CustomThemes  []CustomTheme       `toml:"custom_theme"`
 	Hotkey        HotkeyConfig        `toml:"hotkey"`
 	Audio         AudioConfig         `toml:"audio"`
 	Transcription TranscriptionConfig `toml:"transcription"`
