@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -61,24 +60,27 @@ func (s *Server) IsInstalled() bool {
 // or in our bundled OnnxDir.
 func (s *Server) onnxRuntimeAvailable() bool {
 	// Check bundled copy first
-	matches, _ := filepath.Glob(filepath.Join(s.OnnxDir, "libonnxruntime.so*"))
+	matches, _ := filepath.Glob(filepath.Join(s.OnnxDir, "libonnxruntime"+libExtension()+"*"))
 	if len(matches) > 0 {
 		return true
 	}
-	// Check if it's available system-wide via ldconfig
-	out, err := exec.Command("ldconfig", "-p").Output()
-	if err == nil {
-		for _, line := range strings.Split(string(out), "\n") {
-			if strings.Contains(line, "libonnxruntime.so") {
-				return true
-			}
-		}
-	}
-	return false
+	// Check if it's available system-wide
+	return systemOnnxRuntimeAvailable()
 }
 
 // Setup downloads the Parakeet binary and model files if they are missing.
+// On platforms where Parakeet is not available, it prints guidance and returns nil.
 func (s *Server) Setup(progress ProgressFunc) error {
+	if !parakeetAvailable() {
+		s.Logger.Printf("Parakeet is not available on this platform.")
+		s.Logger.Printf("For local transcription on macOS, consider:")
+		s.Logger.Printf("  - whisper.cpp: https://github.com/ggerganov/whisper.cpp")
+		s.Logger.Printf("  - Speaches (Docker): https://github.com/speaches-ai/speaches")
+		s.Logger.Printf("For cloud transcription, configure a provider in config.toml:")
+		s.Logger.Printf("  - Groq: base_url = \"https://api.groq.com/openai\"")
+		return nil
+	}
+
 	// Download binary
 	if _, err := os.Stat(s.BinaryPath); os.IsNotExist(err) {
 		s.Logger.Printf("downloading parakeet binary...")
@@ -88,7 +90,7 @@ func (s *Server) Setup(progress ProgressFunc) error {
 			return fmt.Errorf("download parakeet binary: %w", err)
 		}
 		s.Logger.Printf("binary SHA256: %s", checksum)
-		if err := verifyELF(s.BinaryPath); err != nil {
+		if err := verifyBinary(s.BinaryPath); err != nil {
 			os.Remove(s.BinaryPath)
 			return fmt.Errorf("downloaded binary is invalid: %w", err)
 		}
@@ -139,11 +141,12 @@ func (s *Server) Start(ctx context.Context) error {
 	cmd.Stderr = s.Logger.Writer()
 
 	// Set ONNXRUNTIME_LIB so parakeet can find bundled ONNX Runtime,
-	// and LD_LIBRARY_PATH as fallback for dynamic linker resolution.
-	onnxLib := filepath.Join(s.OnnxDir, "libonnxruntime.so")
+	// and the platform library path as fallback for dynamic linker resolution.
+	onnxLib := filepath.Join(s.OnnxDir, "libonnxruntime"+libExtension())
+	libPathVar := libraryPathEnvVar()
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("ONNXRUNTIME_LIB=%s", onnxLib),
-		fmt.Sprintf("LD_LIBRARY_PATH=%s:%s", s.OnnxDir, os.Getenv("LD_LIBRARY_PATH")),
+		fmt.Sprintf("%s=%s:%s", libPathVar, s.OnnxDir, os.Getenv(libPathVar)),
 	)
 
 	if err := cmd.Start(); err != nil {

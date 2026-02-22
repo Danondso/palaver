@@ -18,11 +18,15 @@ import (
 type ProgressFunc func(stage string, downloaded, total int64)
 
 // parakeetBinaryURL returns the GitHub release URL for the parakeet binary.
+// Returns empty string if parakeet is not available on this platform.
 func parakeetBinaryURL() string {
+	if !parakeetAvailable() {
+		return ""
+	}
 	arch := runtime.GOARCH
 	goos := runtime.GOOS
 	if goos != "linux" {
-		goos = "linux" // only linux supported for now
+		goos = "linux"
 	}
 	return fmt.Sprintf(
 		"https://github.com/achetronic/parakeet/releases/latest/download/parakeet-%s-%s",
@@ -46,9 +50,20 @@ const onnxRuntimeVersion = "1.24.2"
 
 // onnxRuntimeURL returns the GitHub release URL for the ONNX Runtime C library.
 func onnxRuntimeURL() string {
+	var platform string
+	switch runtime.GOOS {
+	case "darwin":
+		if runtime.GOARCH == "arm64" {
+			platform = "osx-arm64"
+		} else {
+			platform = "osx-x86_64"
+		}
+	default:
+		platform = "linux-x64"
+	}
 	return fmt.Sprintf(
-		"https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-linux-x64-%s.tgz",
-		onnxRuntimeVersion, onnxRuntimeVersion,
+		"https://github.com/microsoft/onnxruntime/releases/download/v%s/onnxruntime-%s-%s.tgz",
+		onnxRuntimeVersion, platform, onnxRuntimeVersion,
 	)
 }
 
@@ -114,26 +129,6 @@ func downloadFile(url, dest string, progress ProgressFunc, stage string) (string
 	}
 
 	return hex.EncodeToString(hash.Sum(nil)), nil
-}
-
-// verifyELF checks that a file starts with the ELF magic bytes, providing
-// a basic integrity check that the downloaded binary is a valid executable.
-func verifyELF(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	magic := make([]byte, 4)
-	if _, err := io.ReadFull(f, magic); err != nil {
-		return fmt.Errorf("read magic bytes: %w", err)
-	}
-	// ELF magic: 0x7f 'E' 'L' 'F'
-	if magic[0] != 0x7f || magic[1] != 'E' || magic[2] != 'L' || magic[3] != 'F' {
-		return fmt.Errorf("not a valid ELF binary (got %x)", magic)
-	}
-	return nil
 }
 
 // downloadAndExtractOnnxRuntime downloads the ONNX Runtime tgz and extracts

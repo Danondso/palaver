@@ -71,7 +71,7 @@ func TestIsInstalledTrueWhenPresent(t *testing.T) {
 	if err := os.MkdirAll(srv.OnnxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srv.OnnxDir, "libonnxruntime.so"), []byte("fake"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(srv.OnnxDir, "libonnxruntime"+libExtension()), []byte("fake"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
