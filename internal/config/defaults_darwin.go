@@ -2,5 +2,5 @@
 
 package config
 
-const defaultHotkeyKey = "Option+Space"
+const defaultHotkeyKey = "Cmd+Option"
 const defaultPasteMode = "clipboard"

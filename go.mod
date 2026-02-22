@@ -13,8 +13,6 @@ require (
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
 	github.com/holoplot/go-evdev v0.0.0-20250804134636-ab1d56a1fe83
 	github.com/tphakala/go-audio-resampling v0.0.0-20251123212058-a9dde25e8eea
-	golang.design/x/hotkey v0.4.1
-	golang.design/x/mainthread v0.3.0
 )
 
 require (

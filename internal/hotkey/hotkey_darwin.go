@@ -2,166 +2,261 @@
 
 package hotkey
 
+/*
+#cgo LDFLAGS: -framework CoreGraphics -framework CoreFoundation
+
+#include <stdint.h>
+
+extern int  startEventTap(int listenerID);
+extern void stopEventTap(int listenerID);
+*/
+import "C"
+
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
-
-	"golang.design/x/hotkey"
+	"sync"
 )
 
-// modifierMap maps modifier name strings to hotkey.Modifier values.
-var modifierMap = map[string]hotkey.Modifier{
-	"OPTION": hotkey.ModOption,
-	"ALT":    hotkey.ModOption,
-	"CTRL":   hotkey.ModCtrl,
-	"SHIFT":  hotkey.ModShift,
-	"CMD":    hotkey.ModCmd,
+// Modifier represents a macOS CGEvent modifier flag.
+type Modifier uint64
+
+const (
+	ModShift  Modifier = 0x00020000 // kCGEventFlagMaskShift
+	ModCtrl   Modifier = 0x00040000 // kCGEventFlagMaskControl
+	ModOption Modifier = 0x00080000 // kCGEventFlagMaskAlternate
+	ModCmd    Modifier = 0x00100000 // kCGEventFlagMaskCommand
+)
+
+// allModsMask covers the four modifier flags we match against.
+const allModsMask = ModShift | ModCtrl | ModOption | ModCmd
+
+// Key represents a macOS virtual key code.
+type Key uint16
+
+const (
+	KeyA      Key = 0x00
+	KeyS      Key = 0x01
+	KeyD      Key = 0x02
+	KeyF      Key = 0x03
+	KeyH      Key = 0x04
+	KeyG      Key = 0x05
+	KeyZ      Key = 0x06
+	KeyX      Key = 0x07
+	KeyC      Key = 0x08
+	KeyV      Key = 0x09
+	KeyB      Key = 0x0B
+	KeyQ      Key = 0x0C
+	KeyW      Key = 0x0D
+	KeyE      Key = 0x0E
+	KeyR      Key = 0x0F
+	KeyY      Key = 0x10
+	KeyT      Key = 0x11
+	Key1      Key = 0x12
+	Key2      Key = 0x13
+	Key3      Key = 0x14
+	Key4      Key = 0x15
+	Key6      Key = 0x16
+	Key5      Key = 0x17
+	Key9      Key = 0x19
+	Key7      Key = 0x1A
+	Key8      Key = 0x1C
+	Key0      Key = 0x1D
+	KeyO      Key = 0x1F
+	KeyU      Key = 0x20
+	KeyI      Key = 0x22
+	KeyP      Key = 0x23
+	KeyReturn Key = 0x24
+	KeyL      Key = 0x25
+	KeyJ      Key = 0x26
+	KeyK      Key = 0x28
+	KeyN      Key = 0x2D
+	KeyM      Key = 0x2E
+	KeyTab    Key = 0x30
+	KeySpace  Key = 0x31
+	KeyDelete Key = 0x33
+	KeyEscape Key = 0x35
+	KeyF17    Key = 0x40
+	KeyF18    Key = 0x4F
+	KeyF19    Key = 0x50
+	KeyF20    Key = 0x5A
+	KeyF5     Key = 0x60
+	KeyF6     Key = 0x61
+	KeyF7     Key = 0x62
+	KeyF3     Key = 0x63
+	KeyF8     Key = 0x64
+	KeyF9     Key = 0x65
+	KeyF11    Key = 0x67
+	KeyF13    Key = 0x69
+	KeyF16    Key = 0x6A
+	KeyF14    Key = 0x6B
+	KeyF10    Key = 0x6D
+	KeyF12    Key = 0x6F
+	KeyF15    Key = 0x71
+	KeyF4     Key = 0x76
+	KeyF2     Key = 0x78
+	KeyF1     Key = 0x7A
+	KeyLeft   Key = 0x7B
+	KeyRight  Key = 0x7C
+	KeyDown   Key = 0x7D
+	KeyUp     Key = 0x7E
+	KeyNone   Key = 0xFFFF // sentinel for modifier-only hotkeys
+)
+
+// modifierMap maps modifier name strings to Modifier values.
+var modifierMap = map[string]Modifier{
+	"OPTION": ModOption,
+	"ALT":    ModOption,
+	"CTRL":   ModCtrl,
+	"SHIFT":  ModShift,
+	"CMD":    ModCmd,
 }
 
-// keyMap maps key name strings to hotkey.Key values.
-var keyMap = map[string]hotkey.Key{
-	"SPACE":  hotkey.KeySpace,
-	"RETURN": hotkey.KeyReturn,
-	"ESCAPE": hotkey.KeyEscape,
-	"DELETE": hotkey.KeyDelete,
-	"TAB":    hotkey.KeyTab,
-	"LEFT":   hotkey.KeyLeft,
-	"RIGHT":  hotkey.KeyRight,
-	"UP":     hotkey.KeyUp,
-	"DOWN":   hotkey.KeyDown,
-	"F1":     hotkey.KeyF1,
-	"F2":     hotkey.KeyF2,
-	"F3":     hotkey.KeyF3,
-	"F4":     hotkey.KeyF4,
-	"F5":     hotkey.KeyF5,
-	"F6":     hotkey.KeyF6,
-	"F7":     hotkey.KeyF7,
-	"F8":     hotkey.KeyF8,
-	"F9":     hotkey.KeyF9,
-	"F10":    hotkey.KeyF10,
-	"F11":    hotkey.KeyF11,
-	"F12":    hotkey.KeyF12,
-	"F13":    hotkey.KeyF13,
-	"F14":    hotkey.KeyF14,
-	"F15":    hotkey.KeyF15,
-	"F16":    hotkey.KeyF16,
-	"F17":    hotkey.KeyF17,
-	"F18":    hotkey.KeyF18,
-	"F19":    hotkey.KeyF19,
-	"F20":    hotkey.KeyF20,
-	"A":      hotkey.KeyA,
-	"B":      hotkey.KeyB,
-	"C":      hotkey.KeyC,
-	"D":      hotkey.KeyD,
-	"E":      hotkey.KeyE,
-	"F":      hotkey.KeyF,
-	"G":      hotkey.KeyG,
-	"H":      hotkey.KeyH,
-	"I":      hotkey.KeyI,
-	"J":      hotkey.KeyJ,
-	"K":      hotkey.KeyK,
-	"L":      hotkey.KeyL,
-	"M":      hotkey.KeyM,
-	"N":      hotkey.KeyN,
-	"O":      hotkey.KeyO,
-	"P":      hotkey.KeyP,
-	"Q":      hotkey.KeyQ,
-	"R":      hotkey.KeyR,
-	"S":      hotkey.KeyS,
-	"T":      hotkey.KeyT,
-	"U":      hotkey.KeyU,
-	"V":      hotkey.KeyV,
-	"W":      hotkey.KeyW,
-	"X":      hotkey.KeyX,
-	"Y":      hotkey.KeyY,
-	"Z":      hotkey.KeyZ,
-	"0":      hotkey.Key0,
-	"1":      hotkey.Key1,
-	"2":      hotkey.Key2,
-	"3":      hotkey.Key3,
-	"4":      hotkey.Key4,
-	"5":      hotkey.Key5,
-	"6":      hotkey.Key6,
-	"7":      hotkey.Key7,
-	"8":      hotkey.Key8,
-	"9":      hotkey.Key9,
+// keyMap maps key name strings to Key values.
+var keyMap = map[string]Key{
+	"SPACE":  KeySpace,
+	"RETURN": KeyReturn,
+	"ESCAPE": KeyEscape,
+	"DELETE": KeyDelete,
+	"TAB":    KeyTab,
+	"LEFT":   KeyLeft,
+	"RIGHT":  KeyRight,
+	"UP":     KeyUp,
+	"DOWN":   KeyDown,
+	"F1":     KeyF1,
+	"F2":     KeyF2,
+	"F3":     KeyF3,
+	"F4":     KeyF4,
+	"F5":     KeyF5,
+	"F6":     KeyF6,
+	"F7":     KeyF7,
+	"F8":     KeyF8,
+	"F9":     KeyF9,
+	"F10":    KeyF10,
+	"F11":    KeyF11,
+	"F12":    KeyF12,
+	"F13":    KeyF13,
+	"F14":    KeyF14,
+	"F15":    KeyF15,
+	"F16":    KeyF16,
+	"F17":    KeyF17,
+	"F18":    KeyF18,
+	"F19":    KeyF19,
+	"F20":    KeyF20,
+	"A":      KeyA,
+	"B":      KeyB,
+	"C":      KeyC,
+	"D":      KeyD,
+	"E":      KeyE,
+	"F":      KeyF,
+	"G":      KeyG,
+	"H":      KeyH,
+	"I":      KeyI,
+	"J":      KeyJ,
+	"K":      KeyK,
+	"L":      KeyL,
+	"M":      KeyM,
+	"N":      KeyN,
+	"O":      KeyO,
+	"P":      KeyP,
+	"Q":      KeyQ,
+	"R":      KeyR,
+	"S":      KeyS,
+	"T":      KeyT,
+	"U":      KeyU,
+	"V":      KeyV,
+	"W":      KeyW,
+	"X":      KeyX,
+	"Y":      KeyY,
+	"Z":      KeyZ,
+	"0":      Key0,
+	"1":      Key1,
+	"2":      Key2,
+	"3":      Key3,
+	"4":      Key4,
+	"5":      Key5,
+	"6":      Key6,
+	"7":      Key7,
+	"8":      Key8,
+	"9":      Key9,
 }
 
-// evdevKeyMap maps evdev-style KEY_ names to hotkey.Key values for
+// evdevKeyMap maps evdev-style KEY_ names to Key values for
 // cross-platform config compatibility.
-var evdevKeyMap = map[string]hotkey.Key{
-	"KEY_SPACE":  hotkey.KeySpace,
-	"KEY_ENTER":  hotkey.KeyReturn,
-	"KEY_ESC":    hotkey.KeyEscape,
-	"KEY_DELETE": hotkey.KeyDelete,
-	"KEY_TAB":    hotkey.KeyTab,
-	"KEY_LEFT":   hotkey.KeyLeft,
-	"KEY_RIGHT":  hotkey.KeyRight,
-	"KEY_UP":     hotkey.KeyUp,
-	"KEY_DOWN":   hotkey.KeyDown,
-	"KEY_F1":     hotkey.KeyF1,
-	"KEY_F2":     hotkey.KeyF2,
-	"KEY_F3":     hotkey.KeyF3,
-	"KEY_F4":     hotkey.KeyF4,
-	"KEY_F5":     hotkey.KeyF5,
-	"KEY_F6":     hotkey.KeyF6,
-	"KEY_F7":     hotkey.KeyF7,
-	"KEY_F8":     hotkey.KeyF8,
-	"KEY_F9":     hotkey.KeyF9,
-	"KEY_F10":    hotkey.KeyF10,
-	"KEY_F11":    hotkey.KeyF11,
-	"KEY_F12":    hotkey.KeyF12,
-	"KEY_F13":    hotkey.KeyF13,
-	"KEY_F14":    hotkey.KeyF14,
-	"KEY_F15":    hotkey.KeyF15,
-	"KEY_F16":    hotkey.KeyF16,
-	"KEY_F17":    hotkey.KeyF17,
-	"KEY_F18":    hotkey.KeyF18,
-	"KEY_F19":    hotkey.KeyF19,
-	"KEY_F20":    hotkey.KeyF20,
-	"KEY_A":      hotkey.KeyA,
-	"KEY_B":      hotkey.KeyB,
-	"KEY_C":      hotkey.KeyC,
-	"KEY_D":      hotkey.KeyD,
-	"KEY_E":      hotkey.KeyE,
-	"KEY_F":      hotkey.KeyF,
-	"KEY_G":      hotkey.KeyG,
-	"KEY_H":      hotkey.KeyH,
-	"KEY_I":      hotkey.KeyI,
-	"KEY_J":      hotkey.KeyJ,
-	"KEY_K":      hotkey.KeyK,
-	"KEY_L":      hotkey.KeyL,
-	"KEY_M":      hotkey.KeyM,
-	"KEY_N":      hotkey.KeyN,
-	"KEY_O":      hotkey.KeyO,
-	"KEY_P":      hotkey.KeyP,
-	"KEY_Q":      hotkey.KeyQ,
-	"KEY_R":      hotkey.KeyR,
-	"KEY_S":      hotkey.KeyS,
-	"KEY_T":      hotkey.KeyT,
-	"KEY_U":      hotkey.KeyU,
-	"KEY_V":      hotkey.KeyV,
-	"KEY_W":      hotkey.KeyW,
-	"KEY_X":      hotkey.KeyX,
-	"KEY_Y":      hotkey.KeyY,
-	"KEY_Z":      hotkey.KeyZ,
-	"KEY_0":      hotkey.Key0,
-	"KEY_1":      hotkey.Key1,
-	"KEY_2":      hotkey.Key2,
-	"KEY_3":      hotkey.Key3,
-	"KEY_4":      hotkey.Key4,
-	"KEY_5":      hotkey.Key5,
-	"KEY_6":      hotkey.Key6,
-	"KEY_7":      hotkey.Key7,
-	"KEY_8":      hotkey.Key8,
-	"KEY_9":      hotkey.Key9,
+var evdevKeyMap = map[string]Key{
+	"KEY_SPACE":  KeySpace,
+	"KEY_ENTER":  KeyReturn,
+	"KEY_ESC":    KeyEscape,
+	"KEY_DELETE": KeyDelete,
+	"KEY_TAB":    KeyTab,
+	"KEY_LEFT":   KeyLeft,
+	"KEY_RIGHT":  KeyRight,
+	"KEY_UP":     KeyUp,
+	"KEY_DOWN":   KeyDown,
+	"KEY_F1":     KeyF1,
+	"KEY_F2":     KeyF2,
+	"KEY_F3":     KeyF3,
+	"KEY_F4":     KeyF4,
+	"KEY_F5":     KeyF5,
+	"KEY_F6":     KeyF6,
+	"KEY_F7":     KeyF7,
+	"KEY_F8":     KeyF8,
+	"KEY_F9":     KeyF9,
+	"KEY_F10":    KeyF10,
+	"KEY_F11":    KeyF11,
+	"KEY_F12":    KeyF12,
+	"KEY_F13":    KeyF13,
+	"KEY_F14":    KeyF14,
+	"KEY_F15":    KeyF15,
+	"KEY_F16":    KeyF16,
+	"KEY_F17":    KeyF17,
+	"KEY_F18":    KeyF18,
+	"KEY_F19":    KeyF19,
+	"KEY_F20":    KeyF20,
+	"KEY_A":      KeyA,
+	"KEY_B":      KeyB,
+	"KEY_C":      KeyC,
+	"KEY_D":      KeyD,
+	"KEY_E":      KeyE,
+	"KEY_F":      KeyF,
+	"KEY_G":      KeyG,
+	"KEY_H":      KeyH,
+	"KEY_I":      KeyI,
+	"KEY_J":      KeyJ,
+	"KEY_K":      KeyK,
+	"KEY_L":      KeyL,
+	"KEY_M":      KeyM,
+	"KEY_N":      KeyN,
+	"KEY_O":      KeyO,
+	"KEY_P":      KeyP,
+	"KEY_Q":      KeyQ,
+	"KEY_R":      KeyR,
+	"KEY_S":      KeyS,
+	"KEY_T":      KeyT,
+	"KEY_U":      KeyU,
+	"KEY_V":      KeyV,
+	"KEY_W":      KeyW,
+	"KEY_X":      KeyX,
+	"KEY_Y":      KeyY,
+	"KEY_Z":      KeyZ,
+	"KEY_0":      Key0,
+	"KEY_1":      Key1,
+	"KEY_2":      Key2,
+	"KEY_3":      Key3,
+	"KEY_4":      Key4,
+	"KEY_5":      Key5,
+	"KEY_6":      Key6,
+	"KEY_7":      Key7,
+	"KEY_8":      Key8,
+	"KEY_9":      Key9,
 }
 
 // ParseHotkeyCombo parses a hotkey combo string like "Option+Space" or "Ctrl+F5"
 // into modifiers, a key, and a display name. Also handles evdev-style "KEY_F12"
 // for cross-platform config compatibility (mapped as bare key with no modifiers).
-func ParseHotkeyCombo(combo string) ([]hotkey.Modifier, hotkey.Key, string, error) {
+func ParseHotkeyCombo(combo string) ([]Modifier, Key, string, error) {
 	combo = strings.TrimSpace(combo)
 	if combo == "" {
 		return nil, 0, "", fmt.Errorf("empty hotkey combo")
@@ -175,16 +270,32 @@ func ParseHotkeyCombo(combo string) ([]hotkey.Modifier, hotkey.Key, string, erro
 		if !ok {
 			return nil, 0, "", fmt.Errorf("unknown evdev key: %s (on macOS, use modifier+key combos like Option+Space)", combo)
 		}
-		return []hotkey.Modifier{hotkey.ModOption}, key, combo, nil
+		return []Modifier{ModOption}, key, combo, nil
 	}
 
-	// Parse modifier+key combo: "Option+Space", "Ctrl+Shift+F5", etc.
+	// Parse combo: "Option+Space", "Ctrl+Shift+F5", "Cmd+Option", etc.
 	parts := strings.Split(combo, "+")
 	if len(parts) < 2 {
-		return nil, 0, "", fmt.Errorf("hotkey must be modifier+key (e.g. Option+Space), got: %s", combo)
+		return nil, 0, "", fmt.Errorf("hotkey must be modifier+key or modifier+modifier (e.g. Option+Space, Cmd+Option), got: %s", combo)
 	}
 
-	var mods []hotkey.Modifier
+	// Check if the last part is a modifier (modifier-only combo like "Cmd+Option").
+	lastPart := strings.TrimSpace(parts[len(parts)-1])
+	if _, isMod := modifierMap[strings.ToUpper(lastPart)]; isMod {
+		var mods []Modifier
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			mod, ok := modifierMap[strings.ToUpper(part)]
+			if !ok {
+				return nil, 0, "", fmt.Errorf("unknown modifier: %s (valid: Option, Alt, Ctrl, Shift, Cmd)", part)
+			}
+			mods = append(mods, mod)
+		}
+		return mods, KeyNone, combo, nil
+	}
+
+	// Last part is a key, everything before is a modifier.
+	var mods []Modifier
 	for _, part := range parts[:len(parts)-1] {
 		part = strings.TrimSpace(part)
 		mod, ok := modifierMap[strings.ToUpper(part)]
@@ -194,61 +305,179 @@ func ParseHotkeyCombo(combo string) ([]hotkey.Modifier, hotkey.Key, string, erro
 		mods = append(mods, mod)
 	}
 
-	keyStr := strings.TrimSpace(parts[len(parts)-1])
-	key, ok := keyMap[strings.ToUpper(keyStr)]
+	key, ok := keyMap[strings.ToUpper(lastPart)]
 	if !ok {
-		return nil, 0, "", fmt.Errorf("unknown key: %s", keyStr)
+		return nil, 0, "", fmt.Errorf("unknown key: %s", lastPart)
 	}
 
 	return mods, key, combo, nil
 }
 
-// darwinListener implements the Listener interface using golang.design/x/hotkey.
+// maxListenerID must match the fixed-size C arrays in cgeventtap_darwin.c.
+const maxListenerID = 256
+
+// Global registry for active listeners.
+var (
+	listenerMu     sync.Mutex
+	listenerMap    = make(map[int]*darwinListener)
+	nextListenerID int
+	freedIDs       []int
+)
+
+// darwinListener implements the Listener interface using CGEventTap.
 type darwinListener struct {
-	mods    []hotkey.Modifier
-	key     hotkey.Key
+	mods    []Modifier
+	modMask Modifier
+	key     Key
 	keyName string
-	hk      *hotkey.Hotkey
+	id      int
+	onDown  func()
+	onUp    func()
+	active  bool // true while the hotkey is held down
+	modOnly bool // true for modifier-only combos (e.g. Cmd+Option)
 }
 
 // NewListener creates a darwin hotkey Listener for the given modifiers, key, and display name.
-func NewListener(mods []hotkey.Modifier, key hotkey.Key, keyName string) Listener {
-	return &darwinListener{mods: mods, key: key, keyName: keyName}
+func NewListener(mods []Modifier, key Key, keyName string) Listener {
+	mask := Modifier(0)
+	for _, m := range mods {
+		mask |= m
+	}
+	return &darwinListener{mods: mods, modMask: mask, key: key, keyName: keyName, modOnly: key == KeyNone}
 }
 
-// Start registers the hotkey and listens for press/release events.
-// It blocks until the context is cancelled.
+// allocListenerID returns a listener ID in [0, maxListenerID), reusing freed
+// IDs when available. Must be called with listenerMu held.
+func allocListenerID() (int, error) {
+	if len(freedIDs) > 0 {
+		id := freedIDs[len(freedIDs)-1]
+		freedIDs = freedIDs[:len(freedIDs)-1]
+		return id, nil
+	}
+	if nextListenerID >= maxListenerID {
+		return 0, fmt.Errorf("hotkey listener limit reached (%d); cannot register more listeners", maxListenerID)
+	}
+	id := nextListenerID
+	nextListenerID++
+	return id, nil
+}
+
+// freeListenerID returns an ID to the free pool. Must be called with listenerMu held.
+func freeListenerID(id int) {
+	freedIDs = append(freedIDs, id)
+}
+
+// Start creates a CGEventTap and listens for hotkey events.
+// It blocks until the context is cancelled or Stop is called.
 func (l *darwinListener) Start(ctx context.Context, onDown func(), onUp func()) error {
-	l.hk = hotkey.New(l.mods, l.key)
-	if err := l.hk.Register(); err != nil {
-		return fmt.Errorf("register hotkey %s: %w (grant Accessibility permissions in System Settings > Privacy & Security)", l.keyName, err)
-	}
+	l.onDown = onDown
+	l.onUp = onUp
 
-	for {
-		select {
-		case <-ctx.Done():
-			l.hk.Unregister()
-			return ctx.Err()
-		case <-l.hk.Keydown():
-			if onDown != nil {
-				onDown()
-			}
-		case <-l.hk.Keyup():
-			if onUp != nil {
-				onUp()
-			}
-		}
+	listenerMu.Lock()
+	id, err := allocListenerID()
+	if err != nil {
+		listenerMu.Unlock()
+		return err
 	}
+	l.id = id
+	listenerMap[l.id] = l
+	listenerMu.Unlock()
+
+	// Watch for context cancellation and stop the event tap.
+	go func() {
+		<-ctx.Done()
+		C.stopEventTap(C.int(l.id))
+	}()
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ret := C.startEventTap(C.int(l.id))
+
+	listenerMu.Lock()
+	delete(listenerMap, l.id)
+	freeListenerID(l.id)
+	listenerMu.Unlock()
+
+	if ret != 0 {
+		return fmt.Errorf("failed to create event tap for %s (grant Input Monitoring permission in System Settings > Privacy & Security > Input Monitoring)", l.keyName)
+	}
+	return ctx.Err()
 }
 
-// Stop unregisters the hotkey.
+// Stop stops the CGEventTap run loop, causing Start to return.
 func (l *darwinListener) Stop() {
-	if l.hk != nil {
-		l.hk.Unregister()
-	}
+	C.stopEventTap(C.int(l.id))
 }
 
 // KeyName returns the configured hotkey combo string.
 func (l *darwinListener) KeyName() string {
 	return l.keyName
+}
+
+// CGEvent type constants.
+const (
+	cgEventKeyDown       = 10 // kCGEventKeyDown
+	cgEventKeyUp         = 11 // kCGEventKeyUp
+	cgEventFlagsChanged  = 12 // kCGEventFlagsChanged
+)
+
+//export hotkeyEventCallback
+func hotkeyEventCallback(listenerID C.int, eventType C.int, keycode C.int64_t, flags C.uint64_t) {
+	listenerMu.Lock()
+	l, ok := listenerMap[int(listenerID)]
+	listenerMu.Unlock()
+	if !ok {
+		return
+	}
+
+	gotMods := Modifier(flags) & allModsMask
+
+	if l.modOnly {
+		// Modifier-only hotkey: react to flagsChanged events.
+		if int(eventType) != cgEventFlagsChanged {
+			return
+		}
+		if gotMods == l.modMask {
+			if !l.active {
+				l.active = true
+				if l.onDown != nil {
+					l.onDown()
+				}
+			}
+		} else {
+			if l.active {
+				l.active = false
+				if l.onUp != nil {
+					l.onUp()
+				}
+			}
+		}
+		return
+	}
+
+	// Modifier+key hotkey: react to keyDown/keyUp events.
+	if Key(keycode) != l.key {
+		return
+	}
+
+	switch int(eventType) {
+	case cgEventKeyDown:
+		// Only fire onDown on the first press (ignore key repeats).
+		if !l.active && gotMods == l.modMask {
+			l.active = true
+			if l.onDown != nil {
+				l.onDown()
+			}
+		}
+	case cgEventKeyUp:
+		// Don't check modifiers on key-up — the user may have already
+		// released the modifier key before releasing the main key.
+		if l.active {
+			l.active = false
+			if l.onUp != nil {
+				l.onUp()
+			}
+		}
+	}
 }

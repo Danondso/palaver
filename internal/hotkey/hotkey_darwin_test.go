@@ -4,26 +4,26 @@ package hotkey
 
 import (
 	"testing"
-
-	"golang.design/x/hotkey"
 )
 
 func TestParseHotkeyCombo(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		wantMods []hotkey.Modifier
-		wantKey  hotkey.Key
+		wantMods []Modifier
+		wantKey  Key
 		wantErr  bool
 	}{
-		{"option+space", "Option+Space", []hotkey.Modifier{hotkey.ModOption}, hotkey.KeySpace, false},
-		{"ctrl+f5", "Ctrl+F5", []hotkey.Modifier{hotkey.ModCtrl}, hotkey.KeyF5, false},
-		{"ctrl+shift+s", "Ctrl+Shift+S", []hotkey.Modifier{hotkey.ModCtrl, hotkey.ModShift}, hotkey.KeyS, false},
-		{"cmd+option+a", "Cmd+Option+A", []hotkey.Modifier{hotkey.ModCmd, hotkey.ModOption}, hotkey.KeyA, false},
-		{"alt is option", "Alt+Space", []hotkey.Modifier{hotkey.ModOption}, hotkey.KeySpace, false},
-		{"case insensitive", "option+space", []hotkey.Modifier{hotkey.ModOption}, hotkey.KeySpace, false},
-		{"evdev key", "KEY_F12", []hotkey.Modifier{hotkey.ModOption}, hotkey.KeyF12, false},
-		{"evdev space", "KEY_SPACE", []hotkey.Modifier{hotkey.ModOption}, hotkey.KeySpace, false},
+		{"option+space", "Option+Space", []Modifier{ModOption}, KeySpace, false},
+		{"ctrl+f5", "Ctrl+F5", []Modifier{ModCtrl}, KeyF5, false},
+		{"ctrl+shift+s", "Ctrl+Shift+S", []Modifier{ModCtrl, ModShift}, KeyS, false},
+		{"cmd+option+a", "Cmd+Option+A", []Modifier{ModCmd, ModOption}, KeyA, false},
+		{"alt is option", "Alt+Space", []Modifier{ModOption}, KeySpace, false},
+		{"case insensitive", "option+space", []Modifier{ModOption}, KeySpace, false},
+		{"mod only cmd+option", "Cmd+Option", []Modifier{ModCmd, ModOption}, KeyNone, false},
+		{"mod only ctrl+shift", "Ctrl+Shift", []Modifier{ModCtrl, ModShift}, KeyNone, false},
+		{"evdev key", "KEY_F12", []Modifier{ModOption}, KeyF12, false},
+		{"evdev space", "KEY_SPACE", []Modifier{ModOption}, KeySpace, false},
 		{"empty", "", nil, 0, true},
 		{"no modifier", "Space", nil, 0, true},
 		{"unknown modifier", "Super+Space", nil, 0, true},
