@@ -55,6 +55,8 @@ type TranscriptionErrorMsg struct {
 
 type errorTimeoutMsg struct{}
 
+type configSavedMsg struct{ err error }
+
 type audioLevelTickMsg struct{}
 
 // StatusCheckMsg carries the result of a mic + backend availability check.
@@ -156,7 +158,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			next := NextTheme(m.themeName)
 			applyTheme(next)
 			m.themeName = strings.ToLower(next.Name)
-			return m, nil
+			m.Config.Theme = m.themeName
+			return m, m.saveConfigCmd()
 		case "r":
 			if m.Server != nil {
 				m.serverState = "starting"
@@ -234,6 +237,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.serverState = "running"
 		}
 		return m, m.statusCheckCmd()
+
+	case configSavedMsg:
+		if msg.err != nil && m.Logger != nil {
+			m.Logger.Printf("failed to save config: %v", msg.err)
+		}
 
 	case DebugLogMsg:
 		m.DebugEntries = append(m.DebugEntries, msg.Entry)
@@ -319,6 +327,14 @@ func scheduleStatusRecheck() tea.Cmd {
 	return tea.Tick(statusRecheckInterval, func(time.Time) tea.Msg {
 		return statusCheckTickMsg{}
 	})
+}
+
+func (m Model) saveConfigCmd() tea.Cmd {
+	cfg := m.Config
+	path := config.DefaultPath()
+	return func() tea.Msg {
+		return configSavedMsg{err: config.Save(path, cfg)}
+	}
 }
 
 func (m Model) serverRestartCmd() tea.Cmd {
