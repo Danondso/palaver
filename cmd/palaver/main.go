@@ -134,6 +134,15 @@ func run() {
 		}
 	}
 
+	// Warn if sending transcribed text over plaintext HTTP to a non-local host
+	if cfg.PostProcessing.Enabled {
+		if u, err := url.Parse(cfg.PostProcessing.BaseURL); err == nil {
+			if u.Scheme == "http" && u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1" {
+				log.Printf("WARNING: post_processing base_url uses plaintext HTTP to non-local host %q — transcribed text will be sent unencrypted", u.Hostname())
+			}
+		}
+	}
+
 	// Create chime player
 	chimePlayer, err := chime.New(cfg.Audio.ChimeStart, cfg.Audio.ChimeStop, cfg.Audio.ChimeEnabled, dbg)
 	if err != nil {
