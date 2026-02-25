@@ -111,7 +111,7 @@ func (l *LLMPostProcessor) Rewrite(ctx context.Context, text string) (string, er
 		return "", fmt.Errorf("no choices in response")
 	}
 
-	result := strings.TrimSpace(chatResp.Choices[0].Message.Content)
+	result := strings.TrimRight(chatResp.Choices[0].Message.Content, " \t\n\r")
 	if l.logger != nil {
 		l.logger.Printf("postprocess result: %q", result)
 	}

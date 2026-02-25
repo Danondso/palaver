@@ -627,6 +627,7 @@ func TestViewShowsModelInFooterWhenActive(t *testing.T) {
 	m := newTestModel()
 	m.toneName = "formal"
 	m.ppModelName = "llama3.2"
+	m.Config.PostProcessing.Enabled = true
 	view := m.View()
 	if !contains(view, "m: model") || !contains(view, "llama3.2") {
 		t.Error("expected footer to contain model info when tone is active")

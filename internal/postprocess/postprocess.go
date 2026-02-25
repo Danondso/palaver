@@ -121,5 +121,8 @@ func New(cfg *config.PostProcessingConfig, customTones []config.CustomTone, logg
 		return &NoopPostProcessor{}
 	}
 	tone := ResolveTone(cfg.Tone)
+	if tone.Prompt == "" {
+		return &NoopPostProcessor{}
+	}
 	return NewLLM(cfg.BaseURL, cfg.Model, tone.Prompt, cfg.TimeoutSec, logger)
 }

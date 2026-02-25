@@ -59,6 +59,7 @@ type TranscriptionErrorMsg struct {
 type PostProcessResultMsg struct {
 	Text         string
 	OriginalText string
+	NeedsSpace   bool
 }
 
 type PostProcessErrorMsg struct {
@@ -213,7 +214,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rebuildPostProcessor()
 			return m, tea.Batch(m.saveConfigCmd(), m.ppListModelsCmd())
 		case "m":
-			if strings.ToLower(m.toneName) != "off" && len(m.ppModels) > 0 {
+			if m.Config.PostProcessing.Enabled && strings.ToLower(m.toneName) != "off" && len(m.ppModels) > 0 {
 				currentIdx := -1
 				for i, name := range m.ppModels {
 					if name == m.ppModelName {
@@ -279,23 +280,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Logger.Printf("empty transcription, skipping paste")
 			return m, nil
 		}
-		// Add a leading space between consecutive transcriptions.
-		if m.LastTranscript != "" {
-			text = " " + text
-		}
+		needsSpace := m.LastTranscript != ""
 		m.LastTranscript = msg.Text
 		// Post-processing gate
 		if m.Config.PostProcessing.Enabled && strings.ToLower(m.toneName) != "off" {
 			m.State = StatePostProcessing
-			return m, m.postProcessCmd(text)
+			return m, m.postProcessCmd(text, needsSpace)
+		}
+		// Add a leading space between consecutive transcriptions.
+		if needsSpace {
+			text = " " + text
 		}
 		m.State = StatePasting
 		return m, m.pasteCmd(text)
 
 	case PostProcessResultMsg:
 		m.Logger.Printf("post-processing result: %q", msg.Text)
+		text := msg.Text
+		// Add a leading space between consecutive transcriptions (after rewriting).
+		if msg.NeedsSpace {
+			text = " " + text
+		}
 		m.State = StatePasting
-		return m, m.pasteCmd(msg.Text)
+		return m, m.pasteCmd(text)
 
 	case PostProcessErrorMsg:
 		m.Logger.Printf("post-processing error (falling back to original): %v", msg.Err)
@@ -497,7 +504,7 @@ func (m *Model) rebuildPostProcessor() {
 	)
 }
 
-func (m Model) postProcessCmd(text string) tea.Cmd {
+func (m Model) postProcessCmd(text string, needsSpace bool) tea.Cmd {
 	pp := m.PostProcessor
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -505,7 +512,7 @@ func (m Model) postProcessCmd(text string) tea.Cmd {
 		if err != nil {
 			return PostProcessErrorMsg{Err: err, OriginalText: text}
 		}
-		return PostProcessResultMsg{Text: result, OriginalText: text}
+		return PostProcessResultMsg{Text: result, OriginalText: text, NeedsSpace: needsSpace}
 	}
 }
 

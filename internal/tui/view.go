@@ -93,7 +93,7 @@ func (m Model) View() string {
 	b.WriteString("\n")
 	footer := "Press q to quit  t: theme (" + m.themeName + ")"
 	footer += "  p: tone (" + m.toneName + ")"
-	if strings.ToLower(m.toneName) != "off" {
+	if m.Config.PostProcessing.Enabled && strings.ToLower(m.toneName) != "off" {
 		footer += "  m: model (" + m.ppModelName + ")"
 	}
 	if m.Server != nil {
