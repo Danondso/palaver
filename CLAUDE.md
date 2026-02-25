@@ -58,12 +58,13 @@ Use `palaver setup` to download the managed server and model files (Parakeet + O
 | `hotkey` | Global hotkey listener. Linux: evdev, auto-detects keyboard from `/dev/input/event*`. macOS: CGEventTap via CGO (`cgeventtap_darwin.c`), supports modifier+key and modifier-only combos |
 | `recorder` | PortAudio capture → polyphase FIR resampling (48/44.1kHz → 16kHz) → WAV encoding (mono 16-bit PCM) |
 | `transcriber` | `Transcriber` interface with two providers: `openai` (HTTP multipart to `/v1/audio/transcriptions`) and `command` (shell out with `{input}` template) |
-| `tui` | Bubble Tea state machine: Idle → Recording → Transcribing → Idle (+ Error with 5s auto-clear); configurable themes (synthwave, everforest, gruvbox, monochrome) |
+| `tui` | Bubble Tea state machine: Idle → Recording → Transcribing → [PostProcessing →] Pasting → Idle (+ Error with 5s auto-clear); configurable themes (synthwave, everforest, gruvbox, monochrome) |
+| `postprocess` | LLM-based text rewriting via OpenAI-compatible chat completions API (Ollama default); built-in tone presets (polite, formal, casual, direct, token-efficient) with custom tone support via config |
 | `clipboard` | Paste text into active application. Linux: auto-detects X11 vs Wayland; only "type" mode works (xdotool on X11, ydotool on Wayland); "clipboard" mode is broken on Linux. macOS: "clipboard" mode (default) uses pbcopy+Cmd+V via osascript, "type" mode uses osascript keystroke |
 | `chime` | Embedded start/stop WAV chimes played via beep library; customizable paths in config |
 | `server` | Managed transcription server lifecycle. Linux: Parakeet (download binary, ONNX Runtime, model files). macOS: whisper-cpp/whisper-server (via Homebrew, downloads ggml model). Both: start/stop/restart, auto-start on launch |
 
-**Data flow:** Hotkey press → record audio → resample → encode WAV → transcribe → paste text
+**Data flow:** Hotkey press → record audio → resample → encode WAV → transcribe → [post-process via LLM →] paste text
 
 **Key patterns:**
 - Bubble Tea message-passing for async operations (RecordingStartedMsg, RecordingStoppedMsg, TranscriptionResultMsg, TranscriptionErrorMsg)
@@ -77,4 +78,5 @@ Use `palaver setup` to download the managed server and model files (Parakeet + O
 - Default hotkey: `KEY_RIGHTCTRL` (Linux), `Cmd+Option` (macOS)
 - Default paste mode: `type` (Linux), `clipboard` (macOS)
 - Theme system: 4 built-in themes selectable via config or `t` key at runtime
+- Post-processing: optional LLM rewriting of transcribed text; `p` key cycles tones, `m` key cycles models; defaults to Ollama at `http://localhost:11434/v1` with `llama3.2` model, disabled by default
 - Managed server: auto-start on launch; `r` key to restart; `palaver setup` to install
