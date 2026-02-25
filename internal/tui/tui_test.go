@@ -518,9 +518,7 @@ func TestPostProcessErrorGracefulDegradation(t *testing.T) {
 }
 
 func TestToneCycleKeyP(t *testing.T) {
-	// Save/restore global tone state
-	origOrder := make([]string, len(postprocess.ToneNames()))
-	copy(origOrder, postprocess.ToneNames())
+	defer postprocess.ResetTones()
 
 	m := newTestModel()
 	m.toneName = "off"
@@ -536,12 +534,10 @@ func TestToneCycleKeyP(t *testing.T) {
 	if cmd == nil {
 		t.Error("expected save config command")
 	}
-
-	// Restore original tone order for other tests
-	_ = origOrder
 }
 
 func TestToneCycleKeyPToOff(t *testing.T) {
+	defer postprocess.ResetTones()
 	m := newTestModel()
 	// Find the last tone before "off" in the cycle
 	names := postprocess.ToneNames()

@@ -210,14 +210,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.saveConfigCmd()
 			}
 			m.Config.PostProcessing.Enabled = true
-			tone := postprocess.ResolveTone(next)
-			m.PostProcessor = postprocess.NewLLM(
-				m.Config.PostProcessing.BaseURL,
-				m.Config.PostProcessing.Model,
-				tone.Prompt,
-				m.Config.PostProcessing.TimeoutSec,
-				m.Logger,
-			)
+			m.rebuildPostProcessor()
 			return m, tea.Batch(m.saveConfigCmd(), m.ppListModelsCmd())
 		case "m":
 			if strings.ToLower(m.toneName) != "off" && len(m.ppModels) > 0 {
@@ -231,14 +224,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				nextIdx := (currentIdx + 1) % len(m.ppModels)
 				m.ppModelName = m.ppModels[nextIdx]
 				m.Config.PostProcessing.Model = m.ppModelName
-				tone := postprocess.ResolveTone(m.toneName)
-				m.PostProcessor = postprocess.NewLLM(
-					m.Config.PostProcessing.BaseURL,
-					m.ppModelName,
-					tone.Prompt,
-					m.Config.PostProcessing.TimeoutSec,
-					m.Logger,
-				)
+				m.rebuildPostProcessor()
 				return m, tea.Batch(m.saveConfigCmd(), m.ppListModelsCmd())
 			}
 		case "r":
@@ -334,16 +320,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.Logger.Printf("configured post-processing model %q not found, using %q", m.ppModelName, msg.Models[0])
 					m.ppModelName = msg.Models[0]
 					m.Config.PostProcessing.Model = m.ppModelName
-					// Rebuild PostProcessor with the corrected model
 					if strings.ToLower(m.toneName) != "off" {
-						tone := postprocess.ResolveTone(m.toneName)
-						m.PostProcessor = postprocess.NewLLM(
-							m.Config.PostProcessing.BaseURL,
-							m.ppModelName,
-							tone.Prompt,
-							m.Config.PostProcessing.TimeoutSec,
-							m.Logger,
-						)
+						m.rebuildPostProcessor()
 					}
 					return m, m.saveConfigCmd()
 				}
@@ -505,6 +483,18 @@ func (m Model) ServerStartCmd() tea.Cmd {
 		err := srv.Start(ctx)
 		return serverStartDoneMsg{err: err}
 	}
+}
+
+// rebuildPostProcessor creates a new LLMPostProcessor from the current config.
+func (m *Model) rebuildPostProcessor() {
+	tone := postprocess.ResolveTone(m.toneName)
+	m.PostProcessor = postprocess.NewLLM(
+		m.Config.PostProcessing.BaseURL,
+		m.ppModelName,
+		tone.Prompt,
+		m.Config.PostProcessing.TimeoutSec,
+		m.Logger,
+	)
 }
 
 func (m Model) postProcessCmd(text string) tea.Cmd {

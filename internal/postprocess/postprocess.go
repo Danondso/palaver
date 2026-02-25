@@ -54,6 +54,13 @@ func resetTones() {
 	}
 }
 
+// ResetTones restores the tone registry to its built-in defaults.
+// Intended for use in tests to prevent state leaking between test cases.
+func ResetTones() {
+	resetTones()
+	toneOrder = []string{"off", "polite", "formal", "casual", "direct", "token-efficient"}
+}
+
 // RegisterCustomTones adds custom tones to the tone map and cycle order.
 // Custom tones with the same name as a built-in tone take precedence;
 // a log message is emitted to inform the user.
@@ -80,9 +87,11 @@ func RegisterCustomTones(custom []config.CustomTone, logger *log.Logger) {
 	}
 }
 
-// ToneNames returns the tone cycle order.
+// ToneNames returns a copy of the tone cycle order.
 func ToneNames() []string {
-	return toneOrder
+	out := make([]string, len(toneOrder))
+	copy(out, toneOrder)
+	return out
 }
 
 // ResolveTone returns the Tone for the given name, or the "off" tone if not found.
