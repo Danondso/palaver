@@ -92,6 +92,19 @@ func TestTranscriptionResultTransition(t *testing.T) {
 	}
 }
 
+func TestBlankAudioTranscriptionSkipsPaste(t *testing.T) {
+	m := newTestModel()
+	m.State = StateTranscribing
+	updated, cmd := m.Update(TranscriptionResultMsg{Text: "[BLANK_AUDIO]"})
+	model := updated.(Model)
+	if model.State != StateIdle {
+		t.Errorf("expected StateIdle, got %d", model.State)
+	}
+	if cmd != nil {
+		t.Error("expected no command for blank audio")
+	}
+}
+
 func TestTranscriptionErrorTransition(t *testing.T) {
 	m := newTestModel()
 	m.State = StateTranscribing

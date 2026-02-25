@@ -220,7 +220,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TranscriptionResultMsg:
 		text := msg.Text
 		m.Logger.Printf("transcription result: %q", text)
-		if text == "" {
+		if text == "" || text == "[BLANK_AUDIO]" {
 			m.State = StateIdle
 			m.Logger.Printf("empty transcription, skipping paste")
 			return m, nil
