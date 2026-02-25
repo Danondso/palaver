@@ -229,7 +229,7 @@ Config is loaded from `~/.config/palaver/config.toml`. If the file doesn't exist
 
 [post_processing]
 # enabled = false                          # enable LLM tone rewriting of transcriptions
-# tone = "off"                             # off, polite, formal, casual, direct, token-efficient
+# tone = "off"                             # off, formal, direct, token-efficient
 # model = "llama3.2"                       # LLM model name (from Ollama or compatible API)
 # base_url = "http://localhost:11434/v1"   # OpenAI-compatible chat completions endpoint
 # timeout_sec = 10                         # post-processing request timeout
@@ -260,7 +260,7 @@ separator = "#625647"
 
 Palaver can optionally rewrite transcribed text using a local LLM before pasting. This is useful for cleaning up filler words, adjusting tone for emails, or making speech more concise. Post-processing uses an OpenAI-compatible chat completions API (defaults to [Ollama](https://ollama.com/) on `localhost:11434`).
 
-Built-in tones: `polite`, `formal`, `casual`, `direct`, `token-efficient`. Press `p` at runtime to cycle through tones, or `m` to cycle available models. When tone is set to `off`, post-processing is bypassed entirely.
+Built-in tones: `formal`, `direct`, `token-efficient`. Press `p` at runtime to cycle through tones, or `m` to cycle available models. When tone is set to `off`, post-processing is bypassed entirely.
 
 If the LLM is unavailable or returns an error, Palaver gracefully falls back to pasting the original transcription.
 

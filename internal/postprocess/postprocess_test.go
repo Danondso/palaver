@@ -197,7 +197,7 @@ func TestLLMListModelsError(t *testing.T) {
 func TestResolveToneBuiltin(t *testing.T) {
 	defer saveToneState()()
 
-	for _, name := range []string{"off", "polite", "formal", "casual", "direct", "token-efficient"} {
+	for _, name := range []string{"off", "formal", "direct", "token-efficient"} {
 		tone := ResolveTone(name)
 		if tone.Name != name {
 			t.Errorf("ResolveTone(%q): expected name %q, got %q", name, name, tone.Name)
@@ -217,7 +217,7 @@ func TestResolveToneUnknown(t *testing.T) {
 func TestNextToneCycle(t *testing.T) {
 	defer saveToneState()()
 
-	expected := []string{"polite", "formal", "casual", "direct", "token-efficient", "off"}
+	expected := []string{"formal", "direct", "token-efficient", "off"}
 	current := "off"
 	for _, exp := range expected {
 		next := NextTone(current)

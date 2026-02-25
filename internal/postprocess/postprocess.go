@@ -27,19 +27,17 @@ type Tone struct {
 
 var builtinTones = map[string]Tone{
 	"off":             {Name: "off", Prompt: ""},
-	"polite":          {Name: "polite", Prompt: "Rewrite the following transcribed speech to be more polite, adding please and thank you where appropriate. Keep the meaning identical. Return only the rewritten text, no explanation."},
-	"formal":          {Name: "formal", Prompt: "Rewrite the following transcribed speech in a professional, formal tone suitable for business communication. Keep the meaning identical. Return only the rewritten text, no explanation."},
-	"casual":          {Name: "casual", Prompt: "Rewrite the following transcribed speech in a relaxed, casual tone. Keep the meaning identical. Return only the rewritten text, no explanation."},
-	"direct":          {Name: "direct", Prompt: "Rewrite the following transcribed speech to be concise and direct. Remove all filler words (um, uh, like, you know, so, basically, actually, I mean, kind of, sort of) and unnecessary phrasing. Preserve the core meaning. Return only the rewritten text, no explanation."},
-	"token-efficient": {Name: "token-efficient", Prompt: "Rewrite the following transcribed speech to be maximally concise. First, remove ALL filler and hesitation words (um, uh, like, you know, so, basically, I mean, etc). Then compress: strip articles, pronouns, and redundant words where possible. Use imperative form. The result should be significantly shorter than the input. Return only the rewritten text, no explanation."},
+	"formal":          {Name: "formal", Prompt: "You are a post-processor for speech-to-text transcription. Rewrite the transcribed text in a professional, formal tone suitable for business communication. Remove filler words and false starts. Preserve all specific terms, names, technical words, and instructions exactly as spoken. Return only the rewritten text."},
+	"direct":          {Name: "direct", Prompt: "You are a post-processor for speech-to-text transcription. Rewrite the transcribed text to be concise and direct. Remove all filler words (um, uh, like, you know, so, basically, actually, I mean, kind of, sort of), false starts, and redundant phrasing. Preserve all specific terms, names, technical words, and instructions exactly as spoken. Return only the rewritten text."},
+	"token-efficient": {Name: "token-efficient", Prompt: "You are a post-processor for speech-to-text transcription. Compress the transcribed speech into concise text while preserving the speaker's original intent and meaning. Rules: 1) Remove ALL filler words, hedging, false starts, and conversational padding. 2) Use imperative form where the speaker is giving commands. 3) Strip unnecessary articles, pronouns, and linking phrases. 4) If the speaker listed steps or numbered instructions, preserve that structure. 5) Preserve all technical terms, names, code references, and specific values exactly. 6) Do NOT add information, steps, or details the speaker did not say. 7) Do NOT interpret or expand on what the speaker meant. Return only the compressed text."},
 }
 
 var builtinToneNames = map[string]bool{
-	"off": true, "polite": true, "formal": true,
-	"casual": true, "direct": true, "token-efficient": true,
+	"off": true, "formal": true,
+	"direct": true, "token-efficient": true,
 }
 
-var toneOrder = []string{"off", "polite", "formal", "casual", "direct", "token-efficient"}
+var toneOrder = []string{"off", "formal", "direct", "token-efficient"}
 
 var tones map[string]Tone
 
@@ -58,7 +56,7 @@ func resetTones() {
 // Intended for use in tests to prevent state leaking between test cases.
 func ResetTones() {
 	resetTones()
-	toneOrder = []string{"off", "polite", "formal", "casual", "direct", "token-efficient"}
+	toneOrder = []string{"off", "formal", "direct", "token-efficient"}
 }
 
 // RegisterCustomTones adds custom tones to the tone map and cycle order.

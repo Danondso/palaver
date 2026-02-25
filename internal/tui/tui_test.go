@@ -525,11 +525,11 @@ func TestToneCycleKeyP(t *testing.T) {
 	m.Config.PostProcessing.Tone = "off"
 	updated, cmd := m.Update(testKeyMsg("p"))
 	model := updated.(Model)
-	if model.toneName != "polite" {
-		t.Errorf("expected tone polite after cycling from off, got %s", model.toneName)
+	if model.toneName != "formal" {
+		t.Errorf("expected tone formal after cycling from off, got %s", model.toneName)
 	}
 	if !model.Config.PostProcessing.Enabled {
-		t.Error("expected post-processing enabled after cycling to polite")
+		t.Error("expected post-processing enabled after cycling to formal")
 	}
 	if cmd == nil {
 		t.Error("expected save config command")
