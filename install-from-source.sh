@@ -5,14 +5,14 @@ echo "=== Palaver Installer ==="
 echo
 
 OS="$(uname -s)"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Verify pre-built binary exists
-if [ ! -f "${SCRIPT_DIR}/palaver" ]; then
-    echo "Error: No palaver binary found in ${SCRIPT_DIR}."
-    echo "This script installs from a release tarball. To build from source, use install-from-source.sh instead."
+# Check for Go
+if ! command -v go &>/dev/null; then
+    echo "Error: Go is not installed. Install Go 1.25+ from https://go.dev/dl/"
     exit 1
 fi
+
+echo "Go: $(go version)"
 
 # Install system dependencies
 echo
@@ -45,7 +45,7 @@ else
 
     if command -v apt &>/dev/null; then
         PKG_MGR="apt"
-        AUDIO_PKGS="libportaudio2"
+        AUDIO_PKGS="libportaudio2 portaudio19-dev"
         if [ "$SESSION_TYPE" = "wayland" ]; then
             DISPLAY_PKGS="ydotool wl-clipboard"
         else
@@ -53,7 +53,7 @@ else
         fi
     elif command -v dnf &>/dev/null; then
         PKG_MGR="dnf"
-        AUDIO_PKGS="portaudio"
+        AUDIO_PKGS="portaudio portaudio-devel"
         if [ "$SESSION_TYPE" = "wayland" ]; then
             DISPLAY_PKGS="ydotool wl-clipboard"
         else
@@ -73,7 +73,7 @@ else
 
     if [ -z "$PKG_MGR" ]; then
         echo "Warning: Could not detect package manager. Please install manually:"
-        echo "  - libportaudio2 (runtime library)"
+        echo "  - libportaudio2 / portaudio19-dev"
         echo "  - xdotool + xclip (X11) or ydotool + wl-clipboard (Wayland)"
     else
         ALL_PKGS="$AUDIO_PKGS $DISPLAY_PKGS"
@@ -89,14 +89,25 @@ else
     fi
 fi
 
-# Install palaver binary
+# Build palaver
 echo
+echo "Building palaver..."
 INSTALL_DIR="${HOME}/.local/bin"
 mkdir -p "$INSTALL_DIR"
 
-echo "Installing palaver to ${INSTALL_DIR}/palaver..."
-cp "${SCRIPT_DIR}/palaver" "${INSTALL_DIR}/palaver"
-chmod +x "${INSTALL_DIR}/palaver"
+# Clone or use existing repo
+TMPDIR=$(mktemp -d)
+trap "rm -rf $TMPDIR" EXIT
+
+if [ -f "go.mod" ] && grep -q "palaver" go.mod 2>/dev/null; then
+    echo "Building from current directory..."
+    go build -o "${INSTALL_DIR}/palaver" ./cmd/palaver/
+else
+    echo "Cloning palaver..."
+    git clone https://github.com/Danondso/palaver.git "$TMPDIR/palaver"
+    cd "$TMPDIR/palaver"
+    go build -o "${INSTALL_DIR}/palaver" ./cmd/palaver/
+fi
 
 echo "Installed palaver to ${INSTALL_DIR}/palaver"
 

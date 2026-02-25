@@ -119,10 +119,50 @@ make -j && ./models/download-ggml-model.sh base.en
 
 Update config: `base_url = "http://localhost:8080"`
 
-## Build
+## Install
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/Danondso/palaver/releases), extract it, and run the install script:
+
+### macOS (Apple Silicon)
+
+```bash
+# Download and extract the latest release
+TAG=$(curl -sL https://api.github.com/repos/Danondso/palaver/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+curl -LO "https://github.com/Danondso/palaver/releases/download/${TAG}/palaver_${TAG}_darwin_arm64.tar.gz"
+tar xzf "palaver_${TAG}_darwin_arm64.tar.gz"
+
+# Install (installs dependencies, binary, and model files)
+./install.sh
+```
+
+### Linux (amd64)
+
+```bash
+# Download and extract the latest release
+TAG=$(curl -sL https://api.github.com/repos/Danondso/palaver/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+curl -LO "https://github.com/Danondso/palaver/releases/download/${TAG}/palaver_${TAG}_linux_amd64.tar.gz"
+tar xzf "palaver_${TAG}_linux_amd64.tar.gz"
+
+# Install (installs dependencies, binary, and model files)
+./install.sh
+```
+
+The install script will:
+- Install runtime dependencies using `sudo` (portaudio on Linux, portaudio + whisper-cpp on macOS, plus xdotool/ydotool for paste support)
+- Copy the pre-built `palaver` binary to `~/.local/bin/`
+- Run `palaver setup` to download the transcription model
+- On Linux, add your user to the `input` group for hotkey access (a logout/login may be required for the group change to take effect)
+
+## Build from Source
 
 ```bash
 go build -o palaver ./cmd/palaver/
+```
+
+Or use the `install-from-source.sh` script, which installs build dependencies, compiles palaver, and runs setup in one step:
+
+```bash
+./install-from-source.sh
 ```
 
 ## Usage

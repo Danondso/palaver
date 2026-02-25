@@ -48,7 +48,7 @@ jobs:
       - name: Package
         run: |
           tar czf palaver_${{ needs.tag.outputs.new_tag }}_linux_amd64.tar.gz \
-            palaver README.md LICENSE uninstall.sh
+            palaver README.md LICENSE install.sh uninstall.sh
 
       - uses: actions/upload-artifact@v4
         with:
@@ -79,7 +79,7 @@ jobs:
       - name: Package
         run: |
           tar czf palaver_${{ needs.tag.outputs.new_tag }}_darwin_arm64.tar.gz \
-            palaver README.md LICENSE uninstall.sh
+            palaver README.md LICENSE install.sh uninstall.sh
 
       - uses: actions/upload-artifact@v4
         with:
