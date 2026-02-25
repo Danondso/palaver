@@ -138,7 +138,7 @@ func run() {
 	if cfg.PostProcessing.Enabled {
 		if u, err := url.Parse(cfg.PostProcessing.BaseURL); err == nil {
 			if u.Scheme == "http" && u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1" {
-				log.Printf("WARNING: post_processing base_url uses plaintext HTTP to non-local host %q — transcribed text will be sent unencrypted", u.Hostname())
+				log.Printf("WARNING: post_processing base_url uses plaintext HTTP to non-local host %q — transcribed text will be sent unencrypted", u.Hostname()) //nolint:gosec // hostname from user config, safely quoted with %q
 			}
 		}
 	}

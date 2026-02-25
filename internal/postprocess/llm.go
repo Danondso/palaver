@@ -82,11 +82,11 @@ func (l *LLMPostProcessor) Rewrite(ctx context.Context, text string) (string, er
 	req.Header.Set("Content-Type", "application/json")
 
 	start := time.Now()
-	resp, err := l.client.Do(req)
+	resp, err := l.client.Do(req) //nolint:gosec // URL from user config (base_url), not external input
 	if err != nil {
 		return "", fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MB cap
 	if err != nil {
@@ -128,11 +128,11 @@ func (l *LLMPostProcessor) ListModels(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("build models request: %w", err)
 	}
 
-	resp, err := l.client.Do(req)
+	resp, err := l.client.Do(req) //nolint:gosec // URL from user config (base_url), not external input
 	if err != nil {
 		return nil, fmt.Errorf("list models: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("list models: status %d", resp.StatusCode)
@@ -143,7 +143,7 @@ func (l *LLMPostProcessor) ListModels(ctx context.Context) ([]string, error) {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode models response: %w", err)
 	}
 
