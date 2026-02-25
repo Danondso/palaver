@@ -65,6 +65,7 @@ type PostProcessResultMsg struct {
 type PostProcessErrorMsg struct {
 	Err          error
 	OriginalText string
+	NeedsSpace   bool
 }
 
 type PPModelsListMsg struct {
@@ -306,8 +307,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case PostProcessErrorMsg:
 		m.Logger.Printf("post-processing error (falling back to original): %v", msg.Err)
+		text := msg.OriginalText
+		if msg.NeedsSpace {
+			text = " " + text
+		}
 		m.State = StatePasting
-		return m, m.pasteCmd(msg.OriginalText)
+		return m, m.pasteCmd(text)
 
 	case PPModelsListMsg:
 		if msg.Err != nil {
@@ -510,7 +515,7 @@ func (m Model) postProcessCmd(text string, needsSpace bool) tea.Cmd {
 		ctx := context.Background()
 		result, err := pp.Rewrite(ctx, text)
 		if err != nil {
-			return PostProcessErrorMsg{Err: err, OriginalText: text}
+			return PostProcessErrorMsg{Err: err, OriginalText: text, NeedsSpace: needsSpace}
 		}
 		return PostProcessResultMsg{Text: result, OriginalText: text, NeedsSpace: needsSpace}
 	}
