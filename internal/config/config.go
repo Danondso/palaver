@@ -46,6 +46,21 @@ type ServerConfig struct {
 	Port      int    `toml:"port"`
 }
 
+// PostProcessingConfig holds LLM post-processing settings.
+type PostProcessingConfig struct {
+	Enabled    bool   `toml:"enabled"`
+	Tone       string `toml:"tone"`
+	Model      string `toml:"model"`
+	BaseURL    string `toml:"base_url"`
+	TimeoutSec int    `toml:"timeout_sec"`
+}
+
+// CustomTone defines a user-provided tone preset for post-processing.
+type CustomTone struct {
+	Name   string `toml:"name"`
+	Prompt string `toml:"prompt"`
+}
+
 // CustomTheme defines a user-provided color theme.
 type CustomTheme struct {
 	Name       string `toml:"name"`
@@ -68,8 +83,10 @@ type Config struct {
 	Hotkey        HotkeyConfig        `toml:"hotkey"`
 	Audio         AudioConfig         `toml:"audio"`
 	Transcription TranscriptionConfig `toml:"transcription"`
-	Paste         PasteConfig         `toml:"paste"`
-	Server        ServerConfig        `toml:"server"`
+	Paste          PasteConfig          `toml:"paste"`
+	Server         ServerConfig         `toml:"server"`
+	PostProcessing PostProcessingConfig `toml:"post_processing"`
+	CustomTones    []CustomTone         `toml:"custom_tone"`
 }
 
 // Default returns a Config populated with all default values.
@@ -102,6 +119,13 @@ func Default() *Config {
 			AutoStart: true,
 			DataDir:   "",
 			Port:      5092,
+		},
+		PostProcessing: PostProcessingConfig{
+			Enabled:    false,
+			Tone:       "off",
+			Model:      "llama3.2",
+			BaseURL:    "http://localhost:11434/v1",
+			TimeoutSec: 10,
 		},
 	}
 }

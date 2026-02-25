@@ -15,6 +15,7 @@ import (
 
 	"github.com/Danondso/palaver/internal/chime"
 	"github.com/Danondso/palaver/internal/config"
+	"github.com/Danondso/palaver/internal/postprocess"
 	"github.com/Danondso/palaver/internal/recorder"
 	"github.com/Danondso/palaver/internal/server"
 	"github.com/Danondso/palaver/internal/transcriber"
@@ -123,6 +124,9 @@ func run() {
 		log.Fatalf("create transcriber: %v", err)
 	}
 
+	// Create post-processor
+	pp := postprocess.New(&cfg.PostProcessing, cfg.CustomTones, dbg)
+
 	// Warn if sending audio over plaintext HTTP to a non-local host
 	if u, err := url.Parse(cfg.Transcription.BaseURL); err == nil {
 		if u.Scheme == "http" && u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1" && u.Hostname() != "::1" {
@@ -162,7 +166,7 @@ func run() {
 	}
 
 	// Create TUI model and program
-	model := tui.NewModel(cfg, trans, chimePlayer, rec, micCheckerAdapter{}, dbg, *debug)
+	model := tui.NewModel(cfg, trans, pp, chimePlayer, rec, micCheckerAdapter{}, dbg, *debug)
 	model.Server = srv
 	serverCtx, serverCancel := context.WithCancel(context.Background())
 	model.ServerCtx = serverCtx

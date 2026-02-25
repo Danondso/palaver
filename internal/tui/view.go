@@ -19,6 +19,7 @@ var (
 	idleBadge            lipgloss.Style
 	recordingBadge       lipgloss.Style
 	transcribingBadge    lipgloss.Style
+	postProcessingBadge  lipgloss.Style
 	errorBadge           lipgloss.Style
 	bodyStyle            lipgloss.Style
 	debugTitleStyle      lipgloss.Style
@@ -91,6 +92,10 @@ func (m Model) View() string {
 	b.WriteString(hotkeyStyle.Render(fmt.Sprintf("Hotkey: %s (hold to record)", keyName)))
 	b.WriteString("\n")
 	footer := "Press q to quit  t: theme (" + m.themeName + ")"
+	footer += "  p: tone (" + m.toneName + ")"
+	if strings.ToLower(m.toneName) != "off" {
+		footer += "  m: model (" + m.ppModelName + ")"
+	}
 	if m.Server != nil {
 		footer += "  r: restart server"
 	}
@@ -221,6 +226,8 @@ func (m Model) renderBadge() string {
 		return recordingBadge.Render("● Recording...")
 	case StateTranscribing:
 		return transcribingBadge.Render("● Transcribing...")
+	case StatePostProcessing:
+		return postProcessingBadge.Render("● Rewriting...")
 	case StatePasting:
 		return transcribingBadge.Render("● Pasting...")
 	case StateError:
