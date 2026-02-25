@@ -148,8 +148,8 @@ tar xzf "palaver_${TAG}_linux_amd64.tar.gz"
 ```
 
 The install script will:
-- Install system dependencies (portaudio, whisper-cpp/xdotool/ydotool)
-- Place the `palaver` binary in `~/.local/bin/`
+- Install runtime dependencies (portaudio on Linux, portaudio + whisper-cpp on macOS, plus xdotool/ydotool for paste support)
+- Copy the pre-built `palaver` binary to `~/.local/bin/`
 - Run `palaver setup` to download the transcription model
 - On Linux, add your user to the `input` group for hotkey access
 
@@ -157,6 +157,12 @@ The install script will:
 
 ```bash
 go build -o palaver ./cmd/palaver/
+```
+
+Or use the `install-from-source.sh` script, which installs build dependencies, compiles palaver, and runs setup in one step:
+
+```bash
+./install-from-source.sh
 ```
 
 ## Usage

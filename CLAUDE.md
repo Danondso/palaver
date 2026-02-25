@@ -29,7 +29,7 @@ go test -run TestResample ./internal/recorder
 go fmt ./...
 ```
 
-No Makefile, CI, or linting configuration exists — use the standard Go toolchain directly.
+No Makefile exists — use the standard Go toolchain directly. CI workflows (`.github/workflows/`) and a `.golangci.yml` lint config are present.
 
 Use `--debug` flag for verbose logging: `./palaver --debug`
 
