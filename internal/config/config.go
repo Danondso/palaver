@@ -78,11 +78,11 @@ type CustomTheme struct {
 
 // Config is the top-level configuration.
 type Config struct {
-	Theme         string              `toml:"theme"`
-	CustomThemes  []CustomTheme       `toml:"custom_theme"`
-	Hotkey        HotkeyConfig        `toml:"hotkey"`
-	Audio         AudioConfig         `toml:"audio"`
-	Transcription TranscriptionConfig `toml:"transcription"`
+	Theme          string               `toml:"theme"`
+	CustomThemes   []CustomTheme        `toml:"custom_theme"`
+	Hotkey         HotkeyConfig         `toml:"hotkey"`
+	Audio          AudioConfig          `toml:"audio"`
+	Transcription  TranscriptionConfig  `toml:"transcription"`
 	Paste          PasteConfig          `toml:"paste"`
 	Server         ServerConfig         `toml:"server"`
 	PostProcessing PostProcessingConfig `toml:"post_processing"`
