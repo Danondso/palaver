@@ -12,6 +12,7 @@ import (
 	"github.com/Danondso/palaver/internal/chime"
 	"github.com/Danondso/palaver/internal/clipboard"
 	"github.com/Danondso/palaver/internal/config"
+	"github.com/Danondso/palaver/internal/postprocess"
 	"github.com/Danondso/palaver/internal/server"
 	"github.com/Danondso/palaver/internal/transcriber"
 )
@@ -34,6 +35,7 @@ const (
 	StateIdle State = iota
 	StateRecording
 	StateTranscribing
+	StatePostProcessing
 	StatePasting
 	StateError
 )
@@ -52,6 +54,23 @@ type TranscriptionResultMsg struct {
 
 type TranscriptionErrorMsg struct {
 	Err error
+}
+
+type PostProcessResultMsg struct {
+	Text         string
+	OriginalText string
+	NeedsSpace   bool
+}
+
+type PostProcessErrorMsg struct {
+	Err          error
+	OriginalText string
+	NeedsSpace   bool
+}
+
+type PPModelsListMsg struct {
+	Models []string
+	Err    error
 }
 
 type PasteDoneMsg struct{ Err error }
@@ -116,6 +135,10 @@ type Model struct {
 	ModelName      string
 	statusChecked  bool
 	themeName      string
+	PostProcessor  postprocess.PostProcessor
+	toneName       string
+	ppModelName    string
+	ppModels       []string
 	Server         *server.Server     // nil if not using managed server
 	serverState    string             // "", "starting", "running", "stopped", "error"
 	ServerCtx      context.Context    // cancellable context for server operations
@@ -123,21 +146,24 @@ type Model struct {
 }
 
 // NewModel creates a new TUI model.
-func NewModel(cfg *config.Config, t transcriber.Transcriber, c *chime.Player, rec LevelSampler, mc MicChecker, logger *log.Logger, debug bool) Model {
+func NewModel(cfg *config.Config, t transcriber.Transcriber, pp postprocess.PostProcessor, c *chime.Player, rec LevelSampler, mc MicChecker, logger *log.Logger, debug bool) Model {
 	RegisterCustomThemes(cfg.CustomThemes)
 	themeName := cfg.Theme
 	applyTheme(LoadTheme(themeName))
 	return Model{
-		State:       StateIdle,
-		Config:      cfg,
-		Transcriber: t,
-		Chime:       c,
-		Recorder:    rec,
-		MicChecker:  mc,
-		HotkeyName:  cfg.Hotkey.Key,
-		Logger:      logger,
-		DebugMode:   debug,
-		themeName:   themeName,
+		State:         StateIdle,
+		Config:        cfg,
+		Transcriber:   t,
+		PostProcessor: pp,
+		Chime:         c,
+		Recorder:      rec,
+		MicChecker:    mc,
+		HotkeyName:    cfg.Hotkey.Key,
+		Logger:        logger,
+		DebugMode:     debug,
+		themeName:     themeName,
+		toneName:      cfg.PostProcessing.Tone,
+		ppModelName:   cfg.PostProcessing.Model,
 	}
 }
 
@@ -147,6 +173,9 @@ func (m Model) Init() tea.Cmd {
 	if m.Server != nil {
 		cmds = append(cmds, func() tea.Msg { return serverStartingMsg{} })
 		cmds = append(cmds, m.ServerStartCmd())
+	}
+	if m.Config.PostProcessing.Enabled && strings.ToLower(m.toneName) != "off" {
+		cmds = append(cmds, m.ppListModelsCmd())
 	}
 	return tea.Batch(cmds...)
 }
@@ -173,6 +202,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.themeName = strings.ToLower(next.Name)
 			m.Config.Theme = m.themeName
 			return m, m.saveConfigCmd()
+		case "p":
+			next := postprocess.NextTone(m.toneName)
+			m.toneName = next
+			m.Config.PostProcessing.Tone = next
+			if next == "off" {
+				m.Config.PostProcessing.Enabled = false
+				m.PostProcessor = &postprocess.NoopPostProcessor{}
+				return m, m.saveConfigCmd()
+			}
+			m.Config.PostProcessing.Enabled = true
+			m.rebuildPostProcessor()
+			return m, tea.Batch(m.saveConfigCmd(), m.ppListModelsCmd())
+		case "m":
+			if m.Config.PostProcessing.Enabled && strings.ToLower(m.toneName) != "off" && len(m.ppModels) > 0 {
+				currentIdx := -1
+				for i, name := range m.ppModels {
+					if name == m.ppModelName {
+						currentIdx = i
+						break
+					}
+				}
+				nextIdx := (currentIdx + 1) % len(m.ppModels)
+				m.ppModelName = m.ppModels[nextIdx]
+				m.Config.PostProcessing.Model = m.ppModelName
+				m.rebuildPostProcessor()
+				return m, tea.Batch(m.saveConfigCmd(), m.ppListModelsCmd())
+			}
 		case "r":
 			if m.Server != nil {
 				m.serverState = "starting"
@@ -225,13 +281,64 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Logger.Printf("empty transcription, skipping paste")
 			return m, nil
 		}
+		needsSpace := m.LastTranscript != ""
+		m.LastTranscript = msg.Text
+		// Post-processing gate
+		if m.Config.PostProcessing.Enabled && strings.ToLower(m.toneName) != "off" {
+			m.State = StatePostProcessing
+			return m, m.postProcessCmd(text, needsSpace)
+		}
 		// Add a leading space between consecutive transcriptions.
-		if m.LastTranscript != "" {
+		if needsSpace {
 			text = " " + text
 		}
-		m.LastTranscript = msg.Text
 		m.State = StatePasting
 		return m, m.pasteCmd(text)
+
+	case PostProcessResultMsg:
+		m.Logger.Printf("post-processing result: %q", msg.Text)
+		text := msg.Text
+		// Add a leading space between consecutive transcriptions (after rewriting).
+		if msg.NeedsSpace {
+			text = " " + text
+		}
+		m.State = StatePasting
+		return m, m.pasteCmd(text)
+
+	case PostProcessErrorMsg:
+		m.Logger.Printf("post-processing error (falling back to original): %v", msg.Err)
+		text := msg.OriginalText
+		if msg.NeedsSpace {
+			text = " " + text
+		}
+		m.State = StatePasting
+		return m, m.pasteCmd(text)
+
+	case PPModelsListMsg:
+		if msg.Err != nil {
+			m.Logger.Printf("failed to list post-processing models: %v", msg.Err)
+		} else {
+			m.ppModels = msg.Models
+			// If the configured model isn't in the list, auto-select the first available.
+			if len(msg.Models) > 0 {
+				found := false
+				for _, name := range msg.Models {
+					if name == m.ppModelName {
+						found = true
+						break
+					}
+				}
+				if !found {
+					m.Logger.Printf("configured post-processing model %q not found, using %q", m.ppModelName, msg.Models[0])
+					m.ppModelName = msg.Models[0]
+					m.Config.PostProcessing.Model = m.ppModelName
+					if strings.ToLower(m.toneName) != "off" {
+						m.rebuildPostProcessor()
+					}
+					return m, m.saveConfigCmd()
+				}
+			}
+		}
 
 	case PasteDoneMsg:
 		if msg.Err != nil {
@@ -387,5 +494,42 @@ func (m Model) ServerStartCmd() tea.Cmd {
 	return func() tea.Msg {
 		err := srv.Start(ctx)
 		return serverStartDoneMsg{err: err}
+	}
+}
+
+// rebuildPostProcessor creates a new LLMPostProcessor from the current config.
+func (m *Model) rebuildPostProcessor() {
+	tone := postprocess.ResolveTone(m.toneName)
+	m.PostProcessor = postprocess.NewLLM(
+		m.Config.PostProcessing.BaseURL,
+		m.ppModelName,
+		tone.Prompt,
+		m.Config.PostProcessing.TimeoutSec,
+		m.Logger,
+	)
+}
+
+func (m Model) postProcessCmd(text string, needsSpace bool) tea.Cmd {
+	pp := m.PostProcessor
+	return func() tea.Msg {
+		ctx := context.Background()
+		result, err := pp.Rewrite(ctx, text)
+		if err != nil {
+			return PostProcessErrorMsg{Err: err, OriginalText: text, NeedsSpace: needsSpace}
+		}
+		return PostProcessResultMsg{Text: result, OriginalText: text, NeedsSpace: needsSpace}
+	}
+}
+
+func (m Model) ppListModelsCmd() tea.Cmd {
+	pp := m.PostProcessor
+	return func() tea.Msg {
+		if ml, ok := pp.(postprocess.ModelLister); ok {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			models, err := ml.ListModels(ctx)
+			return PPModelsListMsg{Models: models, Err: err}
+		}
+		return PPModelsListMsg{}
 	}
 }

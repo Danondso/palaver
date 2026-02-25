@@ -191,6 +191,11 @@ func applyTheme(t Theme) {
 		Background(t.Background).
 		Bold(true)
 
+	postProcessingBadge = lipgloss.NewStyle().
+		Foreground(t.Warning).
+		Background(t.Background).
+		Bold(true)
+
 	errorBadge = lipgloss.NewStyle().
 		Foreground(t.Error).
 		Background(t.Background).

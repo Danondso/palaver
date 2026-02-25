@@ -13,7 +13,8 @@ Built in Go with [Bubble Tea](https://github.com/charmbracelet/bubbletea) for th
 2. Speak into your microphone
 3. Release the hotkey
 4. Audio is sent to a local transcription server
-5. Transcribed text is pasted into your active application
+5. Optionally, transcribed text is rewritten by a local LLM (tone post-processing)
+6. Text is pasted into your active application
 
 All processing happens locally by default.
 
@@ -173,7 +174,7 @@ Or use the `install-from-source.sh` script, which installs build dependencies, c
 ./palaver setup     # download managed Parakeet server, ONNX Runtime, and models
 ```
 
-The TUI displays the current state (idle/recording/transcribing/error), the last transcription, and hotkey info. Press `q` or `Ctrl+C` to quit, `t` to cycle themes, `r` to restart the managed server.
+The TUI displays the current state (idle/recording/transcribing/rewriting/pasting/error), the last transcription, and hotkey info. Press `q` or `Ctrl+C` to quit, `t` to cycle themes, `p` to cycle tone presets, `m` to cycle LLM models, `r` to restart the managed server.
 
 ## Uninstall
 
@@ -225,6 +226,13 @@ Config is loaded from `~/.config/palaver/config.toml`. If the file doesn't exist
 # auto_start = true     # auto-start managed server on launch
 # data_dir = ""         # empty = ~/.local/share/palaver
 # port = 5092           # port for managed server
+
+[post_processing]
+# enabled = false                          # enable LLM tone rewriting of transcriptions
+# tone = "off"                             # off, formal, direct, token-efficient
+# model = "llama3.2"                       # LLM model name (from Ollama or compatible API)
+# base_url = "http://localhost:11434/v1"   # OpenAI-compatible chat completions endpoint
+# timeout_sec = 10                         # post-processing request timeout
 ```
 
 ### Custom Themes
@@ -246,6 +254,37 @@ background = "#1A1611"
 text = "#FEF9E0"
 dimmed = "#535A63"
 separator = "#625647"
+```
+
+### Post-Processing (Tone Rewriting)
+
+Palaver can optionally rewrite transcribed text using a local LLM before pasting. This is useful for cleaning up filler words, adjusting tone for emails, or making speech more concise. Post-processing uses an OpenAI-compatible chat completions API (defaults to [Ollama](https://ollama.com/) on `localhost:11434`).
+
+Built-in tones: `formal`, `direct`, `token-efficient`. Press `p` at runtime to cycle through tones, or `m` to cycle available models. When tone is set to `off`, post-processing is bypassed entirely.
+
+If the LLM is unavailable or returns an error, Palaver gracefully falls back to pasting the original transcription.
+
+```toml
+[post_processing]
+enabled = true
+tone = "formal"
+model = "llama3.2"
+base_url = "http://localhost:11434/v1"
+timeout_sec = 10
+```
+
+### Custom Tones
+
+Define custom tone presets with `[[custom_tone]]` blocks. Custom tones are appended to the `p` key cycle. You can also override built-in tones by using the same name.
+
+```toml
+[post_processing]
+enabled = true
+tone = "pirate"
+
+[[custom_tone]]
+name = "pirate"
+prompt = "Rewrite the following transcribed speech as a pirate would say it. Keep the meaning identical. Return only the rewritten text, no explanation."
 ```
 
 ### Custom Chimes
@@ -289,6 +328,7 @@ internal/recorder/                    PortAudio capture, resampling, WAV encodin
 internal/transcriber/                 Transcriber interface + OpenAI/Command providers
 internal/clipboard/                   Paste: xdotool/ydotool (Linux), pbcopy/osascript (macOS)
 internal/chime/                       Audio chime playback via beep
+internal/postprocess/                 LLM tone rewriting via chat completions API
 internal/server/                      Managed server: Parakeet (Linux), whisper-cpp (macOS)
 internal/tui/                         Bubble Tea model + Lip Gloss view
 ```

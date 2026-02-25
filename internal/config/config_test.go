@@ -41,6 +41,146 @@ func TestDefaultValues(t *testing.T) {
 	}
 }
 
+func TestDefaultPostProcessingValues(t *testing.T) {
+	cfg := Default()
+
+	if cfg.PostProcessing.Enabled {
+		t.Error("expected post-processing disabled by default")
+	}
+	if cfg.PostProcessing.Tone != "off" {
+		t.Errorf("expected tone off, got %s", cfg.PostProcessing.Tone)
+	}
+	if cfg.PostProcessing.Model != "llama3.2" {
+		t.Errorf("expected model llama3.2, got %s", cfg.PostProcessing.Model)
+	}
+	if cfg.PostProcessing.BaseURL != "http://localhost:11434/v1" {
+		t.Errorf("expected base URL http://localhost:11434/v1, got %s", cfg.PostProcessing.BaseURL)
+	}
+	if cfg.PostProcessing.TimeoutSec != 10 {
+		t.Errorf("expected timeout 10, got %d", cfg.PostProcessing.TimeoutSec)
+	}
+	if len(cfg.CustomTones) != 0 {
+		t.Errorf("expected no custom tones, got %d", len(cfg.CustomTones))
+	}
+}
+
+func TestLoadPostProcessingOverrides(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	content := `
+[post_processing]
+enabled = true
+tone = "formal"
+model = "mistral"
+base_url = "http://localhost:9999/v1"
+timeout_sec = 20
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !cfg.PostProcessing.Enabled {
+		t.Error("expected post-processing enabled")
+	}
+	if cfg.PostProcessing.Tone != "formal" {
+		t.Errorf("expected tone formal, got %s", cfg.PostProcessing.Tone)
+	}
+	if cfg.PostProcessing.Model != "mistral" {
+		t.Errorf("expected model mistral, got %s", cfg.PostProcessing.Model)
+	}
+	if cfg.PostProcessing.BaseURL != "http://localhost:9999/v1" {
+		t.Errorf("expected base URL http://localhost:9999/v1, got %s", cfg.PostProcessing.BaseURL)
+	}
+	if cfg.PostProcessing.TimeoutSec != 20 {
+		t.Errorf("expected timeout 20, got %d", cfg.PostProcessing.TimeoutSec)
+	}
+}
+
+func TestLoadCustomTones(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	content := `
+[post_processing]
+enabled = true
+tone = "darth-vader"
+model = "llama3.2"
+
+[[custom_tone]]
+name = "darth-vader"
+prompt = "Rewrite as Darth Vader would say it."
+
+[[custom_tone]]
+name = "pirate"
+prompt = "Rewrite as a pirate would say it."
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.CustomTones) != 2 {
+		t.Fatalf("expected 2 custom tones, got %d", len(cfg.CustomTones))
+	}
+	if cfg.CustomTones[0].Name != "darth-vader" {
+		t.Errorf("expected first tone name darth-vader, got %s", cfg.CustomTones[0].Name)
+	}
+	if cfg.CustomTones[0].Prompt != "Rewrite as Darth Vader would say it." {
+		t.Errorf("unexpected prompt: %s", cfg.CustomTones[0].Prompt)
+	}
+	if cfg.CustomTones[1].Name != "pirate" {
+		t.Errorf("expected second tone name pirate, got %s", cfg.CustomTones[1].Name)
+	}
+}
+
+func TestSaveRoundTripWithPostProcessing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	cfg := Default()
+	cfg.PostProcessing.Enabled = true
+	cfg.PostProcessing.Tone = "polite"
+	cfg.PostProcessing.Model = "mistral"
+	cfg.CustomTones = []CustomTone{
+		{Name: "custom1", Prompt: "Be nice."},
+	}
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load after Save failed: %v", err)
+	}
+
+	if !loaded.PostProcessing.Enabled {
+		t.Error("expected post-processing enabled after round-trip")
+	}
+	if loaded.PostProcessing.Tone != "polite" {
+		t.Errorf("expected tone polite, got %s", loaded.PostProcessing.Tone)
+	}
+	if loaded.PostProcessing.Model != "mistral" {
+		t.Errorf("expected model mistral, got %s", loaded.PostProcessing.Model)
+	}
+	if len(loaded.CustomTones) != 1 {
+		t.Fatalf("expected 1 custom tone, got %d", len(loaded.CustomTones))
+	}
+	if loaded.CustomTones[0].Name != "custom1" {
+		t.Errorf("expected custom tone name custom1, got %s", loaded.CustomTones[0].Name)
+	}
+}
+
 func TestLoadMissingFile(t *testing.T) {
 	cfg, err := Load("/nonexistent/path/config.toml")
 	if err != nil {

@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/Danondso/palaver/internal/config"
+	"github.com/Danondso/palaver/internal/postprocess"
 )
 
 // mockTranscriber implements transcriber.Transcriber for testing.
@@ -42,9 +45,24 @@ func (m *mockMicChecker) MicName() string {
 	return m.name
 }
 
+type mockPostProcessor struct {
+	result string
+	err    error
+}
+
+func (m *mockPostProcessor) Rewrite(_ context.Context, text string) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	if m.result != "" {
+		return m.result, nil
+	}
+	return text, nil
+}
+
 func newTestModel() Model {
 	cfg := config.Default()
-	return NewModel(cfg, &mockTranscriber{result: "test text"}, nil, nil, nil, log.New(io.Discard, "", 0), false)
+	return NewModel(cfg, &mockTranscriber{result: "test text"}, &postprocess.NoopPostProcessor{}, nil, nil, nil, log.New(io.Discard, "", 0), false)
 }
 
 func TestInitialState(t *testing.T) {
@@ -268,7 +286,7 @@ func TestCustomThemeRegistrationAndCycle(t *testing.T) {
 		},
 	}
 
-	m := NewModel(cfg, &mockTranscriber{result: "test"}, nil, nil, nil, log.New(io.Discard, "", 0), false)
+	m := NewModel(cfg, &mockTranscriber{result: "test"}, &postprocess.NoopPostProcessor{}, nil, nil, nil, log.New(io.Discard, "", 0), false)
 
 	// Theme should be loaded and active.
 	if m.themeName != "testcustom" {
@@ -428,4 +446,260 @@ func TestRecordingStoppedResetsAudioLevel(t *testing.T) {
 	if model.AudioLevel != 0 {
 		t.Errorf("expected AudioLevel 0 after stop, got %f", model.AudioLevel)
 	}
+}
+
+func TestTranscriptionResultWithPostProcessing(t *testing.T) {
+	m := newTestModel()
+	m.State = StateTranscribing
+	m.Config.PostProcessing.Enabled = true
+	m.toneName = "polite"
+	m.PostProcessor = &mockPostProcessor{result: "please help me"}
+	updated, cmd := m.Update(TranscriptionResultMsg{Text: "help me"})
+	model := updated.(Model)
+	if model.State != StatePostProcessing {
+		t.Errorf("expected StatePostProcessing, got %d", model.State)
+	}
+	if cmd == nil {
+		t.Error("expected post-process command")
+	}
+}
+
+func TestTranscriptionResultWithoutPostProcessing(t *testing.T) {
+	m := newTestModel()
+	m.State = StateTranscribing
+	m.Config.PostProcessing.Enabled = false
+	m.toneName = "off"
+	updated, cmd := m.Update(TranscriptionResultMsg{Text: "hello world"})
+	model := updated.(Model)
+	if model.State != StatePasting {
+		t.Errorf("expected StatePasting, got %d", model.State)
+	}
+	if cmd == nil {
+		t.Error("expected paste command")
+	}
+}
+
+func TestTranscriptionResultWithToneOff(t *testing.T) {
+	m := newTestModel()
+	m.State = StateTranscribing
+	m.Config.PostProcessing.Enabled = true
+	m.toneName = "off"
+	updated, _ := m.Update(TranscriptionResultMsg{Text: "hello"})
+	model := updated.(Model)
+	if model.State != StatePasting {
+		t.Errorf("expected StatePasting when tone is off, got %d", model.State)
+	}
+}
+
+func TestPostProcessResultTransition(t *testing.T) {
+	m := newTestModel()
+	m.State = StatePostProcessing
+	updated, cmd := m.Update(PostProcessResultMsg{Text: "rewritten text", OriginalText: "original"})
+	model := updated.(Model)
+	if model.State != StatePasting {
+		t.Errorf("expected StatePasting, got %d", model.State)
+	}
+	if cmd == nil {
+		t.Error("expected paste command")
+	}
+}
+
+func TestPostProcessErrorGracefulDegradation(t *testing.T) {
+	m := newTestModel()
+	m.State = StatePostProcessing
+	updated, cmd := m.Update(PostProcessErrorMsg{Err: fmt.Errorf("timeout"), OriginalText: "original text"})
+	model := updated.(Model)
+	if model.State != StatePasting {
+		t.Errorf("expected StatePasting on PP error (graceful degradation), got %d", model.State)
+	}
+	if cmd == nil {
+		t.Error("expected paste command with original text")
+	}
+}
+
+func TestToneCycleKeyP(t *testing.T) {
+	defer postprocess.ResetTones()
+
+	m := newTestModel()
+	m.toneName = "off"
+	m.Config.PostProcessing.Tone = "off"
+	updated, cmd := m.Update(testKeyMsg("p"))
+	model := updated.(Model)
+	if model.toneName != "formal" {
+		t.Errorf("expected tone formal after cycling from off, got %s", model.toneName)
+	}
+	if !model.Config.PostProcessing.Enabled {
+		t.Error("expected post-processing enabled after cycling to formal")
+	}
+	if cmd == nil {
+		t.Error("expected save config command")
+	}
+}
+
+func TestToneCycleKeyPToOff(t *testing.T) {
+	defer postprocess.ResetTones()
+	m := newTestModel()
+	// Find the last tone before "off" in the cycle
+	names := postprocess.ToneNames()
+	lastTone := names[len(names)-1]
+	m.toneName = lastTone
+	m.Config.PostProcessing.Tone = lastTone
+	m.Config.PostProcessing.Enabled = true
+	updated, _ := m.Update(testKeyMsg("p"))
+	model := updated.(Model)
+	if model.toneName != "off" {
+		t.Errorf("expected tone off after cycling from last tone, got %s", model.toneName)
+	}
+	if model.Config.PostProcessing.Enabled {
+		t.Error("expected post-processing disabled after cycling to off")
+	}
+}
+
+func TestModelCycleKeyM(t *testing.T) {
+	m := newTestModel()
+	m.toneName = "polite"
+	m.Config.PostProcessing.Enabled = true
+	m.ppModels = []string{"llama3.2", "mistral", "codellama"}
+	m.ppModelName = "llama3.2"
+	m.Config.PostProcessing.Model = "llama3.2"
+	updated, cmd := m.Update(testKeyMsg("m"))
+	model := updated.(Model)
+	if model.ppModelName != "mistral" {
+		t.Errorf("expected model mistral after cycling, got %s", model.ppModelName)
+	}
+	if model.Config.PostProcessing.Model != "mistral" {
+		t.Errorf("expected config model mistral, got %s", model.Config.PostProcessing.Model)
+	}
+	if cmd == nil {
+		t.Error("expected save config + list models command")
+	}
+}
+
+func TestModelCycleKeyMIgnoredWhenOff(t *testing.T) {
+	m := newTestModel()
+	m.toneName = "off"
+	m.ppModels = []string{"llama3.2", "mistral"}
+	m.ppModelName = "llama3.2"
+	updated, cmd := m.Update(testKeyMsg("m"))
+	model := updated.(Model)
+	if model.ppModelName != "llama3.2" {
+		t.Errorf("expected model unchanged when tone off, got %s", model.ppModelName)
+	}
+	if cmd != nil {
+		t.Error("expected no command when tone is off")
+	}
+}
+
+func TestModelCycleKeyMIgnoredWhenNoModels(t *testing.T) {
+	m := newTestModel()
+	m.toneName = "polite"
+	m.ppModels = nil
+	m.ppModelName = "llama3.2"
+	updated, cmd := m.Update(testKeyMsg("m"))
+	model := updated.(Model)
+	if model.ppModelName != "llama3.2" {
+		t.Errorf("expected model unchanged when no models, got %s", model.ppModelName)
+	}
+	if cmd != nil {
+		t.Error("expected no command when no models available")
+	}
+}
+
+func TestViewShowsRewritingBadge(t *testing.T) {
+	m := newTestModel()
+	m.State = StatePostProcessing
+	view := m.View()
+	if !contains(view, "Rewriting") {
+		t.Error("expected view to contain 'Rewriting' badge")
+	}
+}
+
+func TestViewShowsToneInFooter(t *testing.T) {
+	m := newTestModel()
+	m.toneName = "polite"
+	view := m.View()
+	if !contains(view, "p: tone (polite)") {
+		t.Error("expected footer to contain 'p: tone (polite)'")
+	}
+}
+
+func TestViewShowsModelInFooterWhenActive(t *testing.T) {
+	m := newTestModel()
+	m.toneName = "formal"
+	m.ppModelName = "llama3.2"
+	m.Config.PostProcessing.Enabled = true
+	view := m.View()
+	if !contains(view, "m: model") || !contains(view, "llama3.2") {
+		t.Error("expected footer to contain model info when tone is active")
+	}
+}
+
+func TestViewHidesModelInFooterWhenOff(t *testing.T) {
+	m := newTestModel()
+	m.toneName = "off"
+	m.ppModelName = "llama3.2"
+	view := m.View()
+	if contains(view, "m: model") {
+		t.Error("expected footer to NOT contain 'm: model' when tone is off")
+	}
+}
+
+func TestPPModelsListMsgUpdatesModels(t *testing.T) {
+	m := newTestModel()
+	updated, _ := m.Update(PPModelsListMsg{Models: []string{"llama3.2", "mistral"}})
+	model := updated.(Model)
+	if len(model.ppModels) != 2 {
+		t.Fatalf("expected 2 PP models, got %d", len(model.ppModels))
+	}
+	if model.ppModels[0] != "llama3.2" {
+		t.Errorf("expected first model llama3.2, got %s", model.ppModels[0])
+	}
+}
+
+func TestPPModelsListMsgErrorPreservesExisting(t *testing.T) {
+	m := newTestModel()
+	m.ppModels = []string{"existing"}
+	updated, _ := m.Update(PPModelsListMsg{Err: fmt.Errorf("connection refused")})
+	model := updated.(Model)
+	if len(model.ppModels) != 1 || model.ppModels[0] != "existing" {
+		t.Error("expected existing models preserved on error")
+	}
+}
+
+func TestPPModelsListAutoSelectsWhenConfiguredNotFound(t *testing.T) {
+	m := newTestModel()
+	m.ppModelName = "nonexistent-model"
+	m.Config.PostProcessing.Model = "nonexistent-model"
+	m.toneName = "polite"
+	m.Config.PostProcessing.Enabled = true
+	updated, cmd := m.Update(PPModelsListMsg{Models: []string{"llama3.2:3b", "mistral"}})
+	model := updated.(Model)
+	if model.ppModelName != "llama3.2:3b" {
+		t.Errorf("expected auto-selected model llama3.2:3b, got %s", model.ppModelName)
+	}
+	if model.Config.PostProcessing.Model != "llama3.2:3b" {
+		t.Errorf("expected config model llama3.2:3b, got %s", model.Config.PostProcessing.Model)
+	}
+	if cmd == nil {
+		t.Error("expected save config command after auto-selection")
+	}
+}
+
+func TestPPModelsListKeepsConfiguredWhenFound(t *testing.T) {
+	m := newTestModel()
+	m.ppModelName = "mistral"
+	m.Config.PostProcessing.Model = "mistral"
+	updated, cmd := m.Update(PPModelsListMsg{Models: []string{"llama3.2:3b", "mistral"}})
+	model := updated.(Model)
+	if model.ppModelName != "mistral" {
+		t.Errorf("expected model to stay mistral, got %s", model.ppModelName)
+	}
+	if cmd != nil {
+		t.Error("expected no save command when model is already correct")
+	}
+}
+
+// testKeyMsg creates a tea.KeyMsg for single-rune keys like "p", "m", "t".
+func testKeyMsg(key string) tea.KeyMsg {
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
 }
