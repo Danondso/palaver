@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,7 +49,7 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download onnxruntime: HTTP %d", resp.StatusCode)
 	}
 
