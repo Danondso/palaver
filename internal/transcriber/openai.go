@@ -60,7 +60,7 @@ func (o *OpenAI) Ping(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("ping: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return nil
 }
 
