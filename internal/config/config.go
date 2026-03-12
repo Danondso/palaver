@@ -167,16 +167,16 @@ func Save(path string, cfg *Config) error {
 
 	if err := toml.NewEncoder(tmp).Encode(cfg); err != nil {
 		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath from os.CreateTemp in same directory
 		return fmt.Errorf("save config: encode toml: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath from os.CreateTemp in same directory
 		return fmt.Errorf("save config: sync: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath from os.CreateTemp in same directory
 		return fmt.Errorf("save config: close: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil { //nolint:gosec // path is caller-provided config file path, not external input

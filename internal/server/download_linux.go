@@ -93,16 +93,20 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 		}
 
 		filename := filepath.Base(relPath)
-		dest := filepath.Join(destDir, filename)
+		dest := filepath.Clean(filepath.Join(destDir, filename))
+		// Validate dest stays within destDir to prevent path traversal
+		if !strings.HasPrefix(dest, filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("tar entry %q escapes destination directory", hdr.Name)
+		}
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			continue
 		case tar.TypeSymlink:
 			// Validate symlink target stays within destDir to prevent path traversal
-			target := filepath.Join(destDir, hdr.Linkname) //nolint:gosec // traversal check follows on next lines
-			if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator), filepath.Clean(destDir)+string(os.PathSeparator)) &&
-				filepath.Clean(target) != filepath.Clean(destDir) {
+			target := filepath.Clean(filepath.Join(destDir, hdr.Linkname))
+			if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) &&
+				target != filepath.Clean(destDir) {
 				return fmt.Errorf("symlink %s target %q escapes destination directory", filename, hdr.Linkname)
 			}
 			// Recreate symlinks (e.g. libonnxruntime.so -> libonnxruntime.so.1.24.2)
@@ -118,7 +122,7 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			if limit <= 0 || limit > maxFileSize {
 				limit = maxFileSize
 			}
-			out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)) //nolint:gosec // path from validated archive entry
+			out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)) //nolint:gosec // dest validated above, mode from trusted archive
 			if err != nil {
 				return fmt.Errorf("create %s: %w", filename, err)
 			}
