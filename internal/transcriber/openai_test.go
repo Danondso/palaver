@@ -32,7 +32,7 @@ func TestOpenAITranscribe(t *testing.T) {
 			return
 		}
 
-		receivedModel = r.FormValue("model")       //nolint:gosec // test code
+		receivedModel = r.FormValue("model")            //nolint:gosec // test code
 		receivedFormat = r.FormValue("response_format") //nolint:gosec // test code
 
 		file, _, err := r.FormFile("file")
