@@ -154,6 +154,7 @@ func DefaultDataDir() string {
 // temporary file and renamed into place so a crash mid-write cannot
 // corrupt the existing config.
 func Save(path string, cfg *Config) error {
+	path = filepath.Clean(path)
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("save config: create directory: %w", err)
@@ -178,8 +179,8 @@ func Save(path string, cfg *Config) error {
 		os.Remove(tmpPath)
 		return fmt.Errorf("save config: close: %w", err)
 	}
-	if err := os.Rename(tmpPath, path); err != nil { //nolint:gosec // path is from caller (config file path), not external input
-		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath is constructed internally via os.CreateTemp
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("save config: rename: %w", err)
 	}
 	return nil
