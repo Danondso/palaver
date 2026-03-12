@@ -179,8 +179,8 @@ func Save(path string, cfg *Config) error {
 		os.Remove(tmpPath)
 		return fmt.Errorf("save config: close: %w", err)
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath)
+	if err := os.Rename(tmpPath, path); err != nil { //nolint:gosec // path is caller-provided config file path, not external input
+		_ = os.Remove(tmpPath) //nolint:gosec // tmpPath from os.CreateTemp in same directory
 		return fmt.Errorf("save config: rename: %w", err)
 	}
 	return nil
