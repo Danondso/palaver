@@ -60,7 +60,7 @@ func (o *OpenAI) Ping(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("ping: %w", err)
 	}
-	resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return nil
 }
 
@@ -89,7 +89,7 @@ func (o *OpenAI) ListModels(ctx context.Context) ([]string, error) {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil {
 		return nil, fmt.Errorf("decode models response: %w", err)
 	}
 
@@ -145,7 +145,7 @@ func (o *OpenAI) Transcribe(ctx context.Context, wavData []byte) (string, error)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MB cap
 	if err != nil {
 		return "", fmt.Errorf("read response: %w", err)
 	}
