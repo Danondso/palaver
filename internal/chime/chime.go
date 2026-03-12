@@ -41,7 +41,7 @@ func New(startPath, stopPath string, enabled bool, logger *log.Logger) (*Player,
 	}
 
 	if startPath != "" {
-		data, err := os.ReadFile(startPath)
+		data, err := os.ReadFile(startPath) //nolint:gosec // path from user config
 		if err != nil {
 			return nil, fmt.Errorf("read start chime %s: %w", startPath, err)
 		}
@@ -49,7 +49,7 @@ func New(startPath, stopPath string, enabled bool, logger *log.Logger) (*Player,
 	}
 
 	if stopPath != "" {
-		data, err := os.ReadFile(stopPath)
+		data, err := os.ReadFile(stopPath) //nolint:gosec // path from user config
 		if err != nil {
 			return nil, fmt.Errorf("read stop chime %s: %w", stopPath, err)
 		}
@@ -79,7 +79,7 @@ func (p *Player) play(data []byte) {
 			}
 			return
 		}
-		defer streamer.Close()
+		defer func() { _ = streamer.Close() }()
 
 		p.initSpeaker(format)
 		if p.initErr != nil {

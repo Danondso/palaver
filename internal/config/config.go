@@ -156,7 +156,7 @@ func DefaultDataDir() string {
 func Save(path string, cfg *Config) error {
 	path = filepath.Clean(path)
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // standard user config directory permissions
 		return fmt.Errorf("save config: create directory: %w", err)
 	}
 	tmp, err := os.CreateTemp(dir, ".palaver-config-*.tmp")
@@ -166,17 +166,17 @@ func Save(path string, cfg *Config) error {
 	tmpPath := tmp.Name()
 
 	if err := toml.NewEncoder(tmp).Encode(cfg); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("save config: encode toml: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("save config: sync: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("save config: close: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil { //nolint:gosec // path is caller-provided config file path, not external input

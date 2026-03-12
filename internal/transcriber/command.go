@@ -39,13 +39,13 @@ func (c *Command) Transcribe(ctx context.Context, wavData []byte) (string, error
 		return "", fmt.Errorf("create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	if _, err := tmpFile.Write(wavData); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return "", fmt.Errorf("write temp file: %w", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	cmdStr := strings.ReplaceAll(c.command, "{input}", tmpPath)
 	if cmdStr == "" {
@@ -57,7 +57,7 @@ func (c *Command) Transcribe(ctx context.Context, wavData []byte) (string, error
 	}
 
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr) //nolint:gosec // user-configured command, intended behavior
 	output, err := cmd.Output()
 	latency := time.Since(start)
 	if err != nil {

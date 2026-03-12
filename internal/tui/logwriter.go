@@ -39,10 +39,7 @@ func parseLine(line string) DebugEntry {
 	}
 
 	// Strip "[DEBUG] " prefix
-	msg := line
-	if strings.HasPrefix(msg, "[DEBUG] ") {
-		msg = msg[8:]
-	}
+	msg := strings.TrimPrefix(line, "[DEBUG] ")
 
 	// Extract timestamp (HH:MM:SS.micros or HH:MM:SS)
 	if len(msg) >= 8 && msg[2] == ':' && msg[5] == ':' {

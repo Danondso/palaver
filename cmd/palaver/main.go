@@ -77,7 +77,7 @@ func runSetup(cfg *config.Config, dbg *log.Logger) {
 			os.Exit(1)
 		}
 		fmt.Println("Server is healthy!")
-		srv.Stop()
+		_ = srv.Stop()
 		cancel()
 	}
 
@@ -114,7 +114,7 @@ func run() {
 	if err := initPortAudio(); err != nil {
 		log.Fatalf("portaudio init: %v", err)
 	}
-	defer portaudio.Terminate()
+	defer func() { _ = portaudio.Terminate() }()
 
 	dbg.Printf("portaudio initialized")
 
@@ -235,6 +235,6 @@ func run() {
 	cancel()
 	serverCancel()
 	if srv != nil {
-		srv.Stop()
+		_ = srv.Stop()
 	}
 }

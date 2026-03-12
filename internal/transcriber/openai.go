@@ -29,7 +29,7 @@ func NewOpenAI(baseURL, model string, timeoutSec int, tlsSkipVerify bool, logger
 	client := &http.Client{}
 	if tlsSkipVerify {
 		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // opt-in via user config, disabled by default
 		}
 	}
 	return &OpenAI{
@@ -78,7 +78,7 @@ func (o *OpenAI) ListModels(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list models: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("list models: status %d", resp.StatusCode)
@@ -143,7 +143,7 @@ func (o *OpenAI) Transcribe(ctx context.Context, wavData []byte) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MB cap
 	if err != nil {

@@ -55,7 +55,7 @@ func pasteClipboard(text string) error {
 func typeAppleScript(text string) error {
 	escaped := escapeAppleScript(text)
 	script := fmt.Sprintf(`tell application "System Events" to keystroke "%s"`, escaped)
-	if err := exec.Command("osascript", "-e", script).Run(); err != nil {
+	if err := exec.Command("osascript", "-e", script).Run(); err != nil { //nolint:gosec // script constructed from escaped user text, intended behavior
 		return fmt.Errorf("osascript keystroke: %w (grant Accessibility permissions in System Settings > Privacy & Security)", err)
 	}
 	return nil
