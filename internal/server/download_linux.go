@@ -19,13 +19,9 @@ const onnxRuntimeVersion = "1.24.2"
 // onnxRuntimeURL returns the GitHub release URL for the ONNX Runtime C library.
 func onnxRuntimeURL() string {
 	var platform string
-	switch runtime.GOOS {
-	case "darwin":
-		if runtime.GOARCH == "arm64" {
-			platform = "osx-arm64"
-		} else {
-			platform = "osx-x86_64"
-		}
+	switch runtime.GOARCH {
+	case "arm64":
+		platform = "linux-aarch64"
 	default:
 		platform = "linux-x64"
 	}
@@ -92,40 +88,50 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			continue
 		}
 
+		// Sanitize: only use the base filename, reject any path separators or traversal
 		filename := filepath.Base(relPath)
-		dest := filepath.Clean(filepath.Join(destDir, filename))
-		// Validate dest stays within destDir to prevent path traversal
-		if !strings.HasPrefix(dest, filepath.Clean(destDir)+string(os.PathSeparator)) {
-			return fmt.Errorf("tar entry %q escapes destination directory", hdr.Name)
+		if filename == "." || filename == ".." || strings.ContainsAny(filename, "/\\") {
+			continue
 		}
+		dest := filepath.Join(destDir, filename)
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			continue
 		case tar.TypeSymlink:
-			// Use only the base name of the link target to prevent path traversal.
 			// ONNX Runtime symlinks are same-directory (e.g. libonnxruntime.so -> libonnxruntime.so.1.24.2).
+			// Reject any link target containing path separators to prevent traversal.
 			linkTarget := filepath.Base(hdr.Linkname)
-			// Recreate symlinks
-			_ = os.Remove(dest)
-			if err := os.Symlink(linkTarget, dest); err != nil {
+			if linkTarget == "." || linkTarget == ".." || strings.ContainsAny(linkTarget, "/\\") {
+				return fmt.Errorf("symlink %s target %q contains path separator", filename, hdr.Linkname)
+			}
+			safeTarget := filepath.Join(destDir, linkTarget)
+			safeDest := filepath.Join(destDir, filename)
+			_ = os.Remove(safeDest)
+			if err := os.Symlink(filepath.Base(safeTarget), safeDest); err != nil {
 				return fmt.Errorf("symlink %s: %w", filename, err)
 			}
 		default:
-			// Limit extraction size to declared header size + 1 byte to detect overflow.
-			// This prevents zip-bomb style attacks with deceptive headers.
+			// Limit extraction size and detect oversized entries.
 			const maxFileSize = 500 * 1024 * 1024 // 500 MB safety cap
 			limit := hdr.Size
 			if limit <= 0 || limit > maxFileSize {
 				limit = maxFileSize
 			}
-			out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)) //nolint:gosec // dest validated above, mode from trusted archive
+			safeDest := filepath.Join(destDir, filename)
+			out, err := os.OpenFile(safeDest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)) //nolint:gosec // mode from trusted ONNX Runtime archive
 			if err != nil {
 				return fmt.Errorf("create %s: %w", filename, err)
 			}
-			if _, err := io.Copy(out, io.LimitReader(tr, limit+1)); err != nil {
+			n, err := io.Copy(out, io.LimitReader(tr, limit+1))
+			if err != nil {
 				_ = out.Close()
 				return fmt.Errorf("extract %s: %w", filename, err)
+			}
+			if n > limit {
+				_ = out.Close()
+				_ = os.Remove(safeDest)
+				return fmt.Errorf("extract %s: file exceeds size limit (%d bytes)", filename, limit)
 			}
 			_ = out.Close()
 		}

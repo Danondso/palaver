@@ -45,7 +45,9 @@ func (c *Command) Transcribe(ctx context.Context, wavData []byte) (string, error
 		_ = tmpFile.Close()
 		return "", fmt.Errorf("write temp file: %w", err)
 	}
-	_ = tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("close temp file: %w", err)
+	}
 
 	cmdStr := strings.ReplaceAll(c.command, "{input}", tmpPath)
 	if cmdStr == "" {
