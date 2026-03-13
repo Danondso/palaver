@@ -103,15 +103,12 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 		case tar.TypeDir:
 			continue
 		case tar.TypeSymlink:
-			// Validate symlink target stays within destDir to prevent path traversal
-			target := filepath.Clean(filepath.Join(destDir, hdr.Linkname))
-			if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) &&
-				target != filepath.Clean(destDir) {
-				return fmt.Errorf("symlink %s target %q escapes destination directory", filename, hdr.Linkname)
-			}
-			// Recreate symlinks (e.g. libonnxruntime.so -> libonnxruntime.so.1.24.2)
+			// Use only the base name of the link target to prevent path traversal.
+			// ONNX Runtime symlinks are same-directory (e.g. libonnxruntime.so -> libonnxruntime.so.1.24.2).
+			linkTarget := filepath.Base(hdr.Linkname)
+			// Recreate symlinks
 			_ = os.Remove(dest)
-			if err := os.Symlink(hdr.Linkname, dest); err != nil {
+			if err := os.Symlink(linkTarget, dest); err != nil {
 				return fmt.Errorf("symlink %s: %w", filename, err)
 			}
 		default:
