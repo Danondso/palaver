@@ -98,17 +98,23 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			continue
 		case tar.TypeSymlink:
 			// ONNX Runtime symlinks are same-directory (e.g. libonnxruntime.so -> libonnxruntime.so.1.24.2).
-			// Reject any link target containing path separators to prevent traversal.
-			linkTarget := filepath.Base(hdr.Linkname)
-			if linkTarget == "." || linkTarget == ".." || strings.ContainsAny(linkTarget, "/\\") {
-				return fmt.Errorf("symlink %s target %q contains path separator", filename, hdr.Linkname)
-			}
+			// Verify both destination and resolved target stay within destDir.
 			safeDest := filepath.Clean(filepath.Join(destDir, filename))
 			if !strings.HasPrefix(safeDest, filepath.Clean(destDir)+string(os.PathSeparator)) {
 				return fmt.Errorf("symlink %s destination escapes target directory", filename)
 			}
+			// Resolve the link target relative to the symlink's directory and verify containment
+			resolvedTarget := filepath.Clean(filepath.Join(filepath.Dir(safeDest), hdr.Linkname))
+			if !strings.HasPrefix(resolvedTarget, filepath.Clean(destDir)+string(os.PathSeparator)) {
+				return fmt.Errorf("symlink %s target %q escapes target directory", filename, hdr.Linkname)
+			}
+			// Compute a safe relative target from the verified absolute path
+			safeLink, err := filepath.Rel(filepath.Dir(safeDest), resolvedTarget)
+			if err != nil {
+				return fmt.Errorf("symlink %s: compute relative target: %w", filename, err)
+			}
 			_ = os.Remove(safeDest)
-			if err := os.Symlink(linkTarget, safeDest); err != nil {
+			if err := os.Symlink(safeLink, safeDest); err != nil {
 				return fmt.Errorf("symlink %s: %w", filename, err)
 			}
 		default:
