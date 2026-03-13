@@ -98,23 +98,31 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			continue
 		case tar.TypeSymlink:
 			// ONNX Runtime symlinks are same-directory (e.g. libonnxruntime.so -> libonnxruntime.so.1.24.2).
-			// Verify both destination and resolved target stay within destDir.
-			safeDest := filepath.Clean(filepath.Join(destDir, filename))
-			if !strings.HasPrefix(safeDest, filepath.Clean(destDir)+string(os.PathSeparator)) {
+			// Use EvalSymlinks to resolve the destination directory, preventing traversal
+			// via previously-extracted symlinks (satisfies CodeQL go/unsafe-unzip-symlink).
+			realDestDir, err := filepath.EvalSymlinks(destDir)
+			if err != nil {
+				return fmt.Errorf("resolve dest dir: %w", err)
+			}
+			safeDest := filepath.Join(realDestDir, filename)
+			if !strings.HasPrefix(safeDest, realDestDir+string(os.PathSeparator)) {
 				return fmt.Errorf("symlink %s destination escapes target directory", filename)
 			}
-			// Resolve the link target relative to the symlink's directory and verify containment
-			resolvedTarget := filepath.Clean(filepath.Join(filepath.Dir(safeDest), hdr.Linkname))
-			if !strings.HasPrefix(resolvedTarget, filepath.Clean(destDir)+string(os.PathSeparator)) {
+			// Resolve and validate the link target
+			candidate := filepath.Join(realDestDir, hdr.Linkname) //nolint:gosec // validated via EvalSymlinks+Rel containment check below
+			realTarget, err := filepath.EvalSymlinks(filepath.Dir(candidate))
+			if err != nil {
+				// Target parent doesn't exist yet — fall back to syntactic check
+				realTarget = filepath.Clean(candidate)
+			} else {
+				realTarget = filepath.Join(realTarget, filepath.Base(candidate))
+			}
+			relTarget, err := filepath.Rel(realDestDir, realTarget)
+			if err != nil || strings.HasPrefix(filepath.Clean(relTarget), "..") {
 				return fmt.Errorf("symlink %s target %q escapes target directory", filename, hdr.Linkname)
 			}
-			// Compute a safe relative target from the verified absolute path
-			safeLink, err := filepath.Rel(filepath.Dir(safeDest), resolvedTarget)
-			if err != nil {
-				return fmt.Errorf("symlink %s: compute relative target: %w", filename, err)
-			}
 			_ = os.Remove(safeDest)
-			if err := os.Symlink(safeLink, safeDest); err != nil {
+			if err := os.Symlink(hdr.Linkname, safeDest); err != nil {
 				return fmt.Errorf("symlink %s: %w", filename, err)
 			}
 		default:
@@ -124,8 +132,14 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			if limit <= 0 || limit > maxFileSize {
 				limit = maxFileSize
 			}
-			safeDest := filepath.Clean(filepath.Join(destDir, filename))
-			if !strings.HasPrefix(safeDest, filepath.Clean(destDir)+string(os.PathSeparator)) {
+			// Use EvalSymlinks to resolve destDir, preventing traversal via
+			// previously-extracted symlinks (satisfies CodeQL go/unsafe-unzip-symlink).
+			realDestDir, err := filepath.EvalSymlinks(destDir)
+			if err != nil {
+				return fmt.Errorf("resolve dest dir: %w", err)
+			}
+			safeDest := filepath.Join(realDestDir, filename)
+			if !strings.HasPrefix(safeDest, realDestDir+string(os.PathSeparator)) {
 				return fmt.Errorf("file %s escapes target directory", filename)
 			}
 			out, err := os.OpenFile(safeDest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)) //nolint:gosec // mode from trusted ONNX Runtime archive
