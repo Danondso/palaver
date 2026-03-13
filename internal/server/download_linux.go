@@ -88,26 +88,34 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			continue
 		}
 
-		// Sanitize: only use the base filename, reject any path separators or traversal
-		filename := filepath.Base(relPath)
-		if filename == "." || filename == ".." || strings.ContainsAny(filename, "/\\") {
-			continue
+		// Resolve destDir via EvalSymlinks to prevent traversal through
+		// previously-extracted symlinks (satisfies CodeQL go/unsafe-unzip-symlink).
+		realDestDir, err := filepath.EvalSymlinks(destDir)
+		if err != nil {
+			return fmt.Errorf("resolve dest dir: %w", err)
 		}
+
+		// Build the candidate destination from the archive entry and validate containment
+		candidateDest := filepath.Join(realDestDir, hdr.Name) //nolint:gosec // validated via EvalSymlinks+HasPrefix containment check below
+		realDest, err := filepath.EvalSymlinks(filepath.Dir(candidateDest))
+		if err != nil {
+			// Parent doesn't exist yet — fall back to syntactic check
+			realDest = filepath.Clean(candidateDest)
+		} else {
+			realDest = filepath.Join(realDest, filepath.Base(candidateDest))
+		}
+		relDest, err := filepath.Rel(realDestDir, realDest)
+		if err != nil || strings.HasPrefix(filepath.Clean(relDest), "..") {
+			return fmt.Errorf("tar entry %q escapes destination directory", hdr.Name)
+		}
+		// Use only the base filename for the actual destination
+		safeDest := filepath.Join(realDestDir, filepath.Base(realDest))
+
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			continue
 		case tar.TypeSymlink:
 			// ONNX Runtime symlinks are same-directory (e.g. libonnxruntime.so -> libonnxruntime.so.1.24.2).
-			// Use EvalSymlinks to resolve the destination directory, preventing traversal
-			// via previously-extracted symlinks (satisfies CodeQL go/unsafe-unzip-symlink).
-			realDestDir, err := filepath.EvalSymlinks(destDir)
-			if err != nil {
-				return fmt.Errorf("resolve dest dir: %w", err)
-			}
-			safeDest := filepath.Join(realDestDir, filename)
-			if !strings.HasPrefix(safeDest, realDestDir+string(os.PathSeparator)) {
-				return fmt.Errorf("symlink %s destination escapes target directory", filename)
-			}
 			// Resolve and validate the link target
 			candidate := filepath.Join(realDestDir, hdr.Linkname) //nolint:gosec // validated via EvalSymlinks+Rel containment check below
 			realTarget, err := filepath.EvalSymlinks(filepath.Dir(candidate))
@@ -119,11 +127,11 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			}
 			relTarget, err := filepath.Rel(realDestDir, realTarget)
 			if err != nil || strings.HasPrefix(filepath.Clean(relTarget), "..") {
-				return fmt.Errorf("symlink %s target %q escapes target directory", filename, hdr.Linkname)
+				return fmt.Errorf("symlink %s target %q escapes target directory", filepath.Base(safeDest), hdr.Linkname)
 			}
 			_ = os.Remove(safeDest)
 			if err := os.Symlink(hdr.Linkname, safeDest); err != nil {
-				return fmt.Errorf("symlink %s: %w", filename, err)
+				return fmt.Errorf("symlink %s: %w", filepath.Base(safeDest), err)
 			}
 		default:
 			// Limit extraction size and detect oversized entries.
@@ -132,29 +140,19 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			if limit <= 0 || limit > maxFileSize {
 				limit = maxFileSize
 			}
-			// Use EvalSymlinks to resolve destDir, preventing traversal via
-			// previously-extracted symlinks (satisfies CodeQL go/unsafe-unzip-symlink).
-			realDestDir, err := filepath.EvalSymlinks(destDir)
-			if err != nil {
-				return fmt.Errorf("resolve dest dir: %w", err)
-			}
-			safeDest := filepath.Join(realDestDir, filename)
-			if !strings.HasPrefix(safeDest, realDestDir+string(os.PathSeparator)) {
-				return fmt.Errorf("file %s escapes target directory", filename)
-			}
 			out, err := os.OpenFile(safeDest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)) //nolint:gosec // mode from trusted ONNX Runtime archive
 			if err != nil {
-				return fmt.Errorf("create %s: %w", filename, err)
+				return fmt.Errorf("create %s: %w", filepath.Base(safeDest), err)
 			}
 			n, err := io.Copy(out, io.LimitReader(tr, limit+1))
 			if err != nil {
 				_ = out.Close()
-				return fmt.Errorf("extract %s: %w", filename, err)
+				return fmt.Errorf("extract %s: %w", filepath.Base(safeDest), err)
 			}
 			if n > limit {
 				_ = out.Close()
 				_ = os.Remove(safeDest)
-				return fmt.Errorf("extract %s: file exceeds size limit (%d bytes)", filename, limit)
+				return fmt.Errorf("extract %s: file exceeds size limit (%d bytes)", filepath.Base(safeDest), limit)
 			}
 			_ = out.Close()
 		}
