@@ -93,8 +93,6 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 		if filename == "." || filename == ".." || strings.ContainsAny(filename, "/\\") {
 			continue
 		}
-		dest := filepath.Join(destDir, filename)
-
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			continue
@@ -105,10 +103,12 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			if linkTarget == "." || linkTarget == ".." || strings.ContainsAny(linkTarget, "/\\") {
 				return fmt.Errorf("symlink %s target %q contains path separator", filename, hdr.Linkname)
 			}
-			safeTarget := filepath.Join(destDir, linkTarget)
-			safeDest := filepath.Join(destDir, filename)
+			safeDest := filepath.Clean(filepath.Join(destDir, filename))
+			if !strings.HasPrefix(safeDest, filepath.Clean(destDir)+string(os.PathSeparator)) {
+				return fmt.Errorf("symlink %s destination escapes target directory", filename)
+			}
 			_ = os.Remove(safeDest)
-			if err := os.Symlink(filepath.Base(safeTarget), safeDest); err != nil {
+			if err := os.Symlink(linkTarget, safeDest); err != nil {
 				return fmt.Errorf("symlink %s: %w", filename, err)
 			}
 		default:
@@ -118,7 +118,10 @@ func downloadAndExtractOnnxRuntime(destDir string, progress ProgressFunc) error 
 			if limit <= 0 || limit > maxFileSize {
 				limit = maxFileSize
 			}
-			safeDest := filepath.Join(destDir, filename)
+			safeDest := filepath.Clean(filepath.Join(destDir, filename))
+			if !strings.HasPrefix(safeDest, filepath.Clean(destDir)+string(os.PathSeparator)) {
+				return fmt.Errorf("file %s escapes target directory", filename)
+			}
 			out, err := os.OpenFile(safeDest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)) //nolint:gosec // mode from trusted ONNX Runtime archive
 			if err != nil {
 				return fmt.Errorf("create %s: %w", filename, err)
