@@ -77,7 +77,7 @@ func (r *Recorder) Start() error {
 	}
 
 	if err := stream.Start(); err != nil {
-		stream.Close()
+		_ = stream.Close()
 		return fmt.Errorf("start stream: %w", err)
 	}
 
@@ -116,7 +116,7 @@ func (r *Recorder) readLoop(stream *portaudio.Stream, inputBuf []int16, channels
 		if channels == 2 {
 			for i := 0; i < len(inputBuf); i += 2 {
 				mono := (int32(inputBuf[i]) + int32(inputBuf[i+1])) / 2
-				r.buf = append(r.buf, int16(mono))
+				r.buf = append(r.buf, int16(mono)) //nolint:gosec // int32 average of two int16 values fits in int16
 			}
 		} else {
 			r.buf = append(r.buf, inputBuf...)
@@ -159,8 +159,8 @@ func (r *Recorder) Stop() ([]byte, bool, error) {
 	}
 
 	if r.stream != nil {
-		r.stream.Stop()
-		r.stream.Close()
+		_ = r.stream.Stop()
+		_ = r.stream.Close()
 		r.stream = nil
 	}
 
@@ -275,7 +275,7 @@ func Resample(samples []int16, inputRate, outputRate float64) ([]int16, error) {
 func DownmixStereoToMono(stereo []int16) []int16 {
 	mono := make([]int16, len(stereo)/2)
 	for i := 0; i < len(stereo); i += 2 {
-		mono[i/2] = int16((int32(stereo[i]) + int32(stereo[i+1])) / 2)
+		mono[i/2] = int16((int32(stereo[i]) + int32(stereo[i+1])) / 2) //nolint:gosec // int32 average of two int16 values fits in int16
 	}
 	return mono
 }
@@ -357,7 +357,7 @@ func DecodeWAV(data []byte) ([]int16, int, error) {
 
 	samples := make([]int16, len(pcmBuf.Data))
 	for i, v := range pcmBuf.Data {
-		samples[i] = int16(v)
+		samples[i] = int16(v) //nolint:gosec // WAV PCM 16-bit data fits in int16
 	}
 
 	return samples, int(dec.SampleRate), nil
