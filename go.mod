@@ -1,6 +1,6 @@
 module github.com/Danondso/palaver
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -36,7 +36,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/tphakala/simd v1.0.12 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
 )
