@@ -29,6 +29,7 @@ type Recorder struct {
 	maxDurationSec int
 	startTime      time.Time
 	truncated      bool
+	unlimited      bool   // when true, readLoop does not apply maxDurationSec
 	audioLevel     uint64 // atomic float64 bits; RMS of last chunk (0.0–1.0)
 }
 
@@ -49,6 +50,16 @@ func New(targetSampleRate, maxDurationSec int) (*Recorder, error) {
 
 // Start begins capturing audio. Returns an error if already recording.
 func (r *Recorder) Start() error {
+	return r.start(false)
+}
+
+// StartContinuous begins capturing with no max-duration cap so a stalled
+// chunk flush cannot stop the stream.
+func (r *Recorder) StartContinuous() error {
+	return r.start(true)
+}
+
+func (r *Recorder) start(continuous bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -58,6 +69,7 @@ func (r *Recorder) Start() error {
 
 	r.buf = nil
 	r.truncated = false
+	r.unlimited = continuous
 	r.startTime = time.Now()
 
 	channels := r.nativeChannels
@@ -93,7 +105,10 @@ func (r *Recorder) Start() error {
 
 func (r *Recorder) readLoop(stream *portaudio.Stream, inputBuf []int16, channels int, done, loopDone chan struct{}) {
 	defer close(loopDone)
-	maxSamples := int(r.nativeSR) * r.maxDurationSec
+	maxSamples := durationCapSamples(r.nativeSR, r.maxDurationSec)
+	if r.unlimited {
+		maxSamples = 0
+	}
 
 	for {
 		select {
@@ -124,7 +139,7 @@ func (r *Recorder) readLoop(stream *portaudio.Stream, inputBuf []int16, channels
 
 		atomic.StoreUint64(&r.audioLevel, math.Float64bits(computeRMS(inputBuf, channels)))
 
-		if len(r.buf) >= maxSamples {
+		if maxSamples > 0 && len(r.buf) >= maxSamples {
 			r.truncated = true
 			r.recording = false
 			r.mu.Unlock()
@@ -174,25 +189,59 @@ func (r *Recorder) Stop() ([]byte, bool, error) {
 	targetSR := r.targetSR
 	r.mu.Unlock()
 
-	if len(samples) == 0 {
-		return nil, truncated, fmt.Errorf("no audio captured")
+	wavData, err := encodeSamples(samples, nativeSR, targetSR)
+	if err != nil {
+		return nil, truncated, err
 	}
 
-	// Resample using polyphase FIR if needed
+	return wavData, truncated, nil
+}
+
+// TakeWAV copies the current buffer to a WAV and clears it without stopping
+// the capture stream. Returns an error if not recording or if the buffer is empty.
+func (r *Recorder) TakeWAV() ([]byte, error) {
+	r.mu.Lock()
+	if !r.recording {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("not recording")
+	}
+	samples := make([]int16, len(r.buf))
+	copy(samples, r.buf)
+	r.buf = r.buf[:0]
+	nativeSR := r.nativeSR
+	targetSR := r.targetSR
+	r.mu.Unlock()
+
+	return encodeSamples(samples, nativeSR, targetSR)
+}
+
+// durationCapSamples returns the sample count at which recording should stop.
+// A maxDurationSec of 0 or less means unlimited (returns 0).
+func durationCapSamples(nativeSR float64, maxDurationSec int) int {
+	if maxDurationSec <= 0 {
+		return 0
+	}
+	return int(nativeSR) * maxDurationSec
+}
+
+func encodeSamples(samples []int16, nativeSR float64, targetSR int) ([]byte, error) {
+	if len(samples) == 0 {
+		return nil, fmt.Errorf("no audio captured")
+	}
+
 	if int(nativeSR) != targetSR {
 		resampled, err := Resample(samples, nativeSR, float64(targetSR))
 		if err != nil {
-			return nil, truncated, fmt.Errorf("resample: %w", err)
+			return nil, fmt.Errorf("resample: %w", err)
 		}
 		samples = resampled
 	}
 
 	wavData, err := EncodeWAV(samples, targetSR)
 	if err != nil {
-		return nil, truncated, fmt.Errorf("encode wav: %w", err)
+		return nil, fmt.Errorf("encode wav: %w", err)
 	}
-
-	return wavData, truncated, nil
+	return wavData, nil
 }
 
 // IsRecording returns whether the recorder is currently capturing.

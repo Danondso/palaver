@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,11 +16,21 @@ import (
 	"github.com/Danondso/palaver/internal/postprocess"
 	"github.com/Danondso/palaver/internal/server"
 	"github.com/Danondso/palaver/internal/transcriber"
+	"github.com/Danondso/palaver/internal/transcript"
 )
 
 // LevelSampler can report the current audio amplitude level.
 type LevelSampler interface {
 	AudioLevel() float64
+}
+
+// ContinuousRecorder can flush WAV chunks without stopping capture.
+type ContinuousRecorder interface {
+	LevelSampler
+	Start() error
+	StartContinuous() error
+	TakeWAV() ([]byte, error)
+	Stop() ([]byte, bool, error)
 }
 
 // MicChecker can report whether a microphone input device is available.
@@ -38,6 +49,7 @@ const (
 	StatePostProcessing
 	StatePasting
 	StateError
+	StateTranscript
 )
 
 // Messages sent through the Bubble Tea update loop.
@@ -80,6 +92,8 @@ type errorTimeoutMsg struct{}
 type configSavedMsg struct{ err error }
 
 type audioLevelTickMsg struct{}
+
+type transcriptChunkTickMsg struct{}
 
 // StatusCheckMsg carries the result of a mic + backend availability check.
 type StatusCheckMsg struct {
@@ -143,6 +157,15 @@ type Model struct {
 	serverState    string             // "", "starting", "running", "stopped", "error"
 	ServerCtx      context.Context    // cancellable context for server operations
 	ServerCancel   context.CancelFunc // cancel function for ServerCtx
+
+	TranscriptOutput    string       // optional --output path; empty means timestamped file in cwd
+	TranscriptGate      *atomic.Bool // set while transcript mode owns the recorder
+	TranscriptPath      string       // path of the active session file
+	transcriptWriter    *transcript.Writer
+	transcriptQueue     [][]byte
+	transcriptBusy      bool
+	transcriptStopping  bool
+	quitAfterTranscript bool
 }
 
 // NewModel creates a new TUI model.
@@ -195,7 +218,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch msg.String() {
 		case "q", "ctrl+c":
+			if m.State == StateTranscript {
+				return m.stopTranscript(true)
+			}
 			return m, tea.Quit
+		case "c":
+			if m.holdToTalkInFlight() {
+				return m, nil
+			}
+			if m.State == StateTranscript {
+				return m.stopTranscript(false)
+			}
+			if m.State == StateIdle {
+				return m.startTranscript()
+			}
+			return m, nil
 		case "t":
 			next := NextTheme(m.themeName)
 			applyTheme(next)
@@ -237,6 +274,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case RecordingStartedMsg:
+		if m.State == StateTranscript || m.transcriptStopping {
+			return m, nil
+		}
 		m.State = StateRecording
 		m.LastError = ""
 		if m.Chime != nil {
@@ -245,14 +285,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, audioLevelTickCmd()
 
 	case audioLevelTickMsg:
-		if m.State == StateRecording && m.Recorder != nil {
+		if (m.State == StateRecording || m.State == StateTranscript) && m.Recorder != nil {
 			m.AudioLevel = m.Recorder.AudioLevel()
 			return m, audioLevelTickCmd()
 		}
 		m.AudioLevel = 0
 		return m, nil
 
+	case transcriptChunkTickMsg:
+		if m.State != StateTranscript || m.transcriptStopping {
+			return m, nil
+		}
+		cmds := []tea.Cmd{transcriptChunkTickCmd()}
+		if cr, ok := m.Recorder.(ContinuousRecorder); ok {
+			wav, err := cr.TakeWAV()
+			if err == nil && len(wav) > 0 {
+				if m.transcriptBusy {
+					m.transcriptQueue = append(m.transcriptQueue, wav)
+				} else {
+					m.transcriptBusy = true
+					cmds = append(cmds, m.transcribeCmd(wav))
+				}
+			}
+		}
+		return m, tea.Batch(cmds...)
+
 	case RecordingStoppedMsg:
+		if m.State == StateTranscript || m.transcriptStopping {
+			return m, nil
+		}
 		m.State = StateTranscribing
 		m.AudioLevel = 0
 		if m.Chime != nil {
@@ -276,6 +337,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TranscriptionResultMsg:
 		text := msg.Text
 		m.Logger.Printf("transcription result: %q", text)
+		if m.State == StateTranscript || m.transcriptStopping {
+			return m.handleTranscriptResult(text)
+		}
 		if text == "" || text == "[BLANK_AUDIO]" {
 			m.State = StateIdle
 			m.Logger.Printf("empty transcription, skipping paste")
@@ -350,11 +414,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case TranscriptionErrorMsg:
+		if m.State == StateTranscript || m.transcriptStopping {
+			m.LastError = msg.Err.Error()
+			m.Logger.Printf("transcript chunk error: %v", msg.Err)
+			m.transcriptBusy = false
+			cmds := []tea.Cmd{scheduleErrorTimeout()}
+			if cmd := m.drainTranscriptQueue(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			if cmd := m.finishTranscriptIfIdle(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
 		m.State = StateError
 		m.LastError = msg.Err.Error()
 		return m, scheduleErrorTimeout()
 
 	case errorTimeoutMsg:
+		if m.State == StateTranscript || m.transcriptStopping {
+			m.LastError = ""
+			return m, nil
+		}
 		m.State = StateIdle
 		m.LastError = ""
 
@@ -386,6 +467,164 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m Model) holdToTalkInFlight() bool {
+	return m.State == StateRecording || m.State == StateTranscribing || m.State == StatePostProcessing || m.State == StatePasting
+}
+
+func (m Model) startTranscript() (Model, tea.Cmd) {
+	cr, ok := m.Recorder.(ContinuousRecorder)
+	if !ok {
+		m.State = StateError
+		m.LastError = "recorder does not support transcript mode"
+		return m, scheduleErrorTimeout()
+	}
+
+	path := m.TranscriptOutput
+	if path == "" {
+		path = transcript.DefaultFilename(time.Now())
+	}
+	w, err := transcript.Open(path)
+	if err != nil {
+		m.State = StateError
+		m.LastError = err.Error()
+		return m, scheduleErrorTimeout()
+	}
+
+	if m.TranscriptGate != nil {
+		m.TranscriptGate.Store(true)
+	}
+	if err := cr.StartContinuous(); err != nil {
+		_ = w.Close()
+		if m.TranscriptGate != nil {
+			m.TranscriptGate.Store(false)
+		}
+		m.State = StateError
+		m.LastError = err.Error()
+		return m, scheduleErrorTimeout()
+	}
+
+	m.transcriptWriter = w
+	m.TranscriptPath = w.Path()
+	m.transcriptQueue = nil
+	m.transcriptBusy = false
+	m.transcriptStopping = false
+	m.quitAfterTranscript = false
+	m.State = StateTranscript
+	m.LastError = ""
+	if m.Chime != nil {
+		m.Chime.PlayStart()
+	}
+	return m, tea.Batch(audioLevelTickCmd(), transcriptChunkTickCmd())
+}
+
+func (m Model) stopTranscript(quit bool) (Model, tea.Cmd) {
+	m.transcriptStopping = true
+	m.quitAfterTranscript = quit
+
+	if cr, ok := m.Recorder.(ContinuousRecorder); ok {
+		wav, _, err := cr.Stop()
+		if err == nil && len(wav) > 0 {
+			if m.transcriptBusy {
+				m.transcriptQueue = append(m.transcriptQueue, wav)
+			} else {
+				m.transcriptBusy = true
+				cmds := []tea.Cmd{m.transcribeCmd(wav)}
+				if cmd := m.finishTranscriptIfIdle(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+				return m, tea.Batch(cmds...)
+			}
+		}
+	}
+
+	if cmd := m.finishTranscriptIfIdle(); cmd != nil {
+		return m, cmd
+	}
+	return m, nil
+}
+
+func (m Model) handleTranscriptResult(text string) (Model, tea.Cmd) {
+	if text != "" && text != "[BLANK_AUDIO]" {
+		m.LastTranscript = text
+		if m.transcriptWriter != nil {
+			if err := m.transcriptWriter.Append(text); err != nil {
+				m.LastError = err.Error()
+				m.Logger.Printf("transcript write error: %v", err)
+			}
+		}
+	} else {
+		m.Logger.Printf("empty transcription, skipping file write")
+	}
+	m.transcriptBusy = false
+	cmds := []tea.Cmd{}
+	if cmd := m.drainTranscriptQueue(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if cmd := m.finishTranscriptIfIdle(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	return m, batchCmds(cmds)
+}
+
+func (m *Model) drainTranscriptQueue() tea.Cmd {
+	if m.transcriptBusy || len(m.transcriptQueue) == 0 {
+		return nil
+	}
+	next := m.transcriptQueue[0]
+	m.transcriptQueue = m.transcriptQueue[1:]
+	m.transcriptBusy = true
+	return m.transcribeCmd(next)
+}
+
+func (m *Model) finishTranscriptIfIdle() tea.Cmd {
+	if !m.transcriptStopping {
+		return nil
+	}
+	if m.transcriptBusy || len(m.transcriptQueue) > 0 {
+		return nil
+	}
+	m.closeTranscriptWriter()
+	m.State = StateIdle
+	m.AudioLevel = 0
+	m.transcriptStopping = false
+	if m.Chime != nil {
+		m.Chime.PlayStop()
+	}
+	if m.quitAfterTranscript {
+		m.quitAfterTranscript = false
+		return tea.Quit
+	}
+	return nil
+}
+
+func (m *Model) closeTranscriptWriter() {
+	if m.transcriptWriter != nil {
+		_ = m.transcriptWriter.Close()
+		m.transcriptWriter = nil
+	}
+	m.TranscriptPath = ""
+	if m.TranscriptGate != nil {
+		m.TranscriptGate.Store(false)
+	}
+}
+
+func batchCmds(cmds []tea.Cmd) tea.Cmd {
+	var out []tea.Cmd
+	for _, c := range cmds {
+		if c != nil {
+			out = append(out, c)
+		}
+	}
+	switch len(out) {
+	case 0:
+		return nil
+	case 1:
+		return out[0]
+	default:
+		return tea.Batch(out...)
+	}
 }
 
 func (m Model) transcribeCmd(wavData []byte) tea.Cmd {
@@ -425,6 +664,14 @@ const audioLevelTickInterval = 100 * time.Millisecond
 func audioLevelTickCmd() tea.Cmd {
 	return tea.Tick(audioLevelTickInterval, func(time.Time) tea.Msg {
 		return audioLevelTickMsg{}
+	})
+}
+
+const transcriptChunkInterval = 8 * time.Second
+
+func transcriptChunkTickCmd() tea.Cmd {
+	return tea.Tick(transcriptChunkInterval, func(time.Time) tea.Msg {
+		return transcriptChunkTickMsg{}
 	})
 }
 

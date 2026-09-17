@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -30,6 +33,40 @@ type mockLevelSampler struct {
 
 func (m *mockLevelSampler) AudioLevel() float64 {
 	return m.level
+}
+
+type mockContinuousRecorder struct {
+	level      float64
+	started    bool
+	continuous bool
+	stopped    bool
+	takeWAV    []byte
+	takeErr    error
+	stopWAV    []byte
+	stopErr    error
+	startErr   error
+}
+
+func (m *mockContinuousRecorder) AudioLevel() float64 { return m.level }
+
+func (m *mockContinuousRecorder) Start() error {
+	m.started = true
+	return m.startErr
+}
+
+func (m *mockContinuousRecorder) StartContinuous() error {
+	m.continuous = true
+	m.started = true
+	return m.startErr
+}
+
+func (m *mockContinuousRecorder) TakeWAV() ([]byte, error) {
+	return m.takeWAV, m.takeErr
+}
+
+func (m *mockContinuousRecorder) Stop() ([]byte, bool, error) {
+	m.stopped = true
+	return m.stopWAV, false, m.stopErr
 }
 
 type mockPostProcessor struct {
@@ -689,4 +726,218 @@ func TestPPModelsListKeepsConfiguredWhenFound(t *testing.T) {
 // testKeyMsg creates a tea.KeyMsg for single-rune keys like "p", "m", "t".
 func testKeyMsg(key string) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+}
+
+func TestTranscriptKeyCEntersMode(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestModel()
+	rec := &mockContinuousRecorder{}
+	m.Recorder = rec
+	m.TranscriptOutput = filepath.Join(dir, "out.txt")
+
+	updated, cmd := m.Update(testKeyMsg("c"))
+	model := updated.(Model)
+	if model.State != StateTranscript {
+		t.Errorf("expected StateTranscript, got %d", model.State)
+	}
+	if !rec.continuous {
+		t.Error("expected StartContinuous to be called")
+	}
+	if cmd == nil {
+		t.Error("expected tick commands on enter")
+	}
+	if model.TranscriptPath != m.TranscriptOutput {
+		t.Errorf("expected path %q, got %q", m.TranscriptOutput, model.TranscriptPath)
+	}
+}
+
+func TestTranscriptKeyCIgnoredWhileRecording(t *testing.T) {
+	m := newTestModel()
+	m.State = StateRecording
+	rec := &mockContinuousRecorder{}
+	m.Recorder = rec
+	updated, cmd := m.Update(testKeyMsg("c"))
+	model := updated.(Model)
+	if model.State != StateRecording {
+		t.Errorf("expected StateRecording, got %d", model.State)
+	}
+	if rec.continuous {
+		t.Error("expected transcript mode not to start during hold-to-talk")
+	}
+	if cmd != nil {
+		t.Error("expected no command")
+	}
+}
+
+func TestTranscriptResultDoesNotPaste(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.txt")
+	m := newTestModel()
+	rec := &mockContinuousRecorder{}
+	m.Recorder = rec
+	m.TranscriptOutput = path
+	updated, _ := m.Update(testKeyMsg("c"))
+	m = updated.(Model)
+	m.transcriptBusy = true
+
+	updated, cmd := m.Update(TranscriptionResultMsg{Text: "hello from mic"})
+	m = updated.(Model)
+	if m.State != StateTranscript {
+		t.Errorf("expected StateTranscript, got %d", m.State)
+	}
+	if m.LastTranscript != "hello from mic" {
+		t.Errorf("expected last transcript, got %q", m.LastTranscript)
+	}
+	if cmd != nil {
+		t.Errorf("expected no paste command, got %T", cmd)
+	}
+
+	data, err := os.ReadFile(path) //nolint:gosec // test path under t.TempDir
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if string(data) != "hello from mic\n" {
+		t.Errorf("file contents %q", data)
+	}
+}
+
+func TestTranscriptBlankAudioDoesNotWrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.txt")
+	m := newTestModel()
+	rec := &mockContinuousRecorder{}
+	m.Recorder = rec
+	m.TranscriptOutput = path
+	updated, _ := m.Update(testKeyMsg("c"))
+	m = updated.(Model)
+	m.transcriptBusy = true
+
+	updated, cmd := m.Update(TranscriptionResultMsg{Text: "[BLANK_AUDIO]"})
+	m = updated.(Model)
+	if m.State != StateTranscript {
+		t.Errorf("expected StateTranscript, got %d", m.State)
+	}
+	if m.LastTranscript != "" {
+		t.Errorf("expected empty last transcript, got %q", m.LastTranscript)
+	}
+	if cmd != nil {
+		t.Error("expected no command")
+	}
+
+	data, err := os.ReadFile(path) //nolint:gosec // test path under t.TempDir
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if len(data) != 0 {
+		t.Errorf("expected empty file, got %q", data)
+	}
+}
+
+func TestTranscriptKeyCExitsMode(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestModel()
+	rec := &mockContinuousRecorder{stopErr: fmt.Errorf("no audio captured")}
+	m.Recorder = rec
+	m.TranscriptOutput = filepath.Join(dir, "out.txt")
+	updated, _ := m.Update(testKeyMsg("c"))
+	m = updated.(Model)
+
+	updated, cmd := m.Update(testKeyMsg("c"))
+	m = updated.(Model)
+	if m.State != StateIdle {
+		t.Errorf("expected StateIdle, got %d", m.State)
+	}
+	if !rec.stopped {
+		t.Error("expected Stop to be called")
+	}
+	if m.transcriptWriter != nil {
+		t.Error("expected writer closed")
+	}
+	if cmd != nil {
+		t.Error("expected no quit command when leaving without leftover audio")
+	}
+}
+
+func TestTranscriptGateSetAndCleared(t *testing.T) {
+	dir := t.TempDir()
+	var gate atomic.Bool
+	m := newTestModel()
+	rec := &mockContinuousRecorder{stopErr: fmt.Errorf("no audio captured")}
+	m.Recorder = rec
+	m.TranscriptGate = &gate
+	m.TranscriptOutput = filepath.Join(dir, "out.txt")
+
+	updated, _ := m.Update(testKeyMsg("c"))
+	m = updated.(Model)
+	if !gate.Load() {
+		t.Error("expected gate set while in transcript mode")
+	}
+
+	updated, _ = m.Update(testKeyMsg("c"))
+	m = updated.(Model)
+	if gate.Load() {
+		t.Error("expected gate cleared after leaving transcript mode")
+	}
+}
+
+func TestTranscriptChunkTickQueuesWhenBusy(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestModel()
+	rec := &mockContinuousRecorder{takeWAV: []byte("wav")}
+	m.Recorder = rec
+	m.TranscriptOutput = filepath.Join(dir, "out.txt")
+	updated, _ := m.Update(testKeyMsg("c"))
+	m = updated.(Model)
+	m.transcriptBusy = true
+
+	updated, cmd := m.Update(transcriptChunkTickMsg{})
+	m = updated.(Model)
+	if len(m.transcriptQueue) != 1 {
+		t.Fatalf("expected 1 queued chunk, got %d", len(m.transcriptQueue))
+	}
+	if cmd == nil {
+		t.Error("expected chunk tick to reschedule")
+	}
+}
+
+func TestAudioLevelTickUpdatesLevelInTranscript(t *testing.T) {
+	m := newTestModel()
+	m.State = StateTranscript
+	m.Recorder = &mockLevelSampler{level: 0.3}
+	updated, cmd := m.Update(audioLevelTickMsg{})
+	model := updated.(Model)
+	if model.AudioLevel != 0.3 {
+		t.Errorf("expected AudioLevel 0.3, got %f", model.AudioLevel)
+	}
+	if cmd == nil {
+		t.Error("expected another tick command while in transcript mode")
+	}
+}
+
+func TestViewShowsTranscriptBadgeAndFooter(t *testing.T) {
+	m := newTestModel()
+	m.State = StateTranscript
+	m.TranscriptPath = "palaver-transcript-test.txt"
+	view := m.View()
+	if !contains(view, "Transcript") {
+		t.Error("expected view to contain Transcript badge")
+	}
+	if !contains(view, "c: transcript") && !contains(view, "c: stop") {
+		t.Error("expected view to contain transcript toggle hint")
+	}
+	if !contains(view, "Writing:") {
+		t.Error("expected view to contain Writing path")
+	}
+}
+
+func TestTranscriptKeyCWithoutRecorderErrors(t *testing.T) {
+	m := newTestModel()
+	updated, cmd := m.Update(testKeyMsg("c"))
+	model := updated.(Model)
+	if model.State != StateError {
+		t.Errorf("expected StateError, got %d", model.State)
+	}
+	if cmd == nil {
+		t.Error("expected error timeout command")
+	}
 }

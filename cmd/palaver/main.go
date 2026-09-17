@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gordonklaus/portaudio"
@@ -93,6 +94,8 @@ func run() {
 	}
 
 	debug := flag.Bool("debug", false, "enable debug logging to stderr")
+	output := flag.String("output", "", "transcript file path (default: palaver-transcript-TIMESTAMP.txt in cwd)")
+	flag.StringVar(output, "o", "", "transcript file path")
 	flag.Parse()
 
 	// Set up debug logger
@@ -180,6 +183,9 @@ func run() {
 	serverCtx, serverCancel := context.WithCancel(context.Background())
 	model.ServerCtx = serverCtx
 	model.ServerCancel = serverCancel
+	var transcriptGate atomic.Bool
+	model.TranscriptGate = &transcriptGate
+	model.TranscriptOutput = *output
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	// When debug is enabled, redirect logger output into the TUI debug panel
@@ -198,6 +204,10 @@ func run() {
 			// onDown: start recording
 			func() {
 				dbg.Printf("hotkey down: %s", listener.KeyName())
+				if transcriptGate.Load() {
+					dbg.Printf("hotkey ignored: transcript mode active")
+					return
+				}
 				recMu.Lock()
 				defer recMu.Unlock()
 				if err := rec.Start(); err != nil {
@@ -209,6 +219,10 @@ func run() {
 			// onUp: stop recording, send WAV data
 			func() {
 				dbg.Printf("hotkey up: %s", listener.KeyName())
+				if transcriptGate.Load() {
+					dbg.Printf("hotkey ignored: transcript mode active")
+					return
+				}
 				recMu.Lock()
 				defer recMu.Unlock()
 				wavData, truncated, err := rec.Stop()

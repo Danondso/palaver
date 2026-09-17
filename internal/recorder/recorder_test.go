@@ -142,3 +142,67 @@ func TestValidateWAVHeaderTooShort(t *testing.T) {
 		t.Error("expected error for short data")
 	}
 }
+
+func TestDurationCapSamples(t *testing.T) {
+	if got := durationCapSamples(16000, 60); got != 16000*60 {
+		t.Errorf("expected %d, got %d", 16000*60, got)
+	}
+	if got := durationCapSamples(48000, 0); got != 0 {
+		t.Errorf("expected 0 for unlimited, got %d", got)
+	}
+	if got := durationCapSamples(48000, -1); got != 0 {
+		t.Errorf("expected 0 for negative duration, got %d", got)
+	}
+}
+
+func TestTakeWAVEncodesAndClearsBuffer(t *testing.T) {
+	sampleRate := 16000
+	samples := make([]int16, sampleRate/10) // 100ms
+	for i := range samples {
+		samples[i] = int16(10000 * math.Sin(2*math.Pi*440*float64(i)/float64(sampleRate)))
+	}
+
+	r := &Recorder{
+		recording: true,
+		buf:       samples,
+		nativeSR:  float64(sampleRate),
+		targetSR:  sampleRate,
+	}
+
+	wavData, err := r.TakeWAV()
+	if err != nil {
+		t.Fatalf("TakeWAV: %v", err)
+	}
+	if len(r.buf) != 0 {
+		t.Errorf("expected buffer cleared, got %d samples", len(r.buf))
+	}
+	if !r.recording {
+		t.Error("expected recording to stay true")
+	}
+
+	sr, ch, bd, err := ValidateWAVHeader(wavData)
+	if err != nil {
+		t.Fatalf("validate header: %v", err)
+	}
+	if sr != sampleRate || ch != 1 || bd != 16 {
+		t.Errorf("unexpected wav header sr=%d ch=%d bd=%d", sr, ch, bd)
+	}
+
+	// Second take with empty buffer should error.
+	if _, err := r.TakeWAV(); err == nil {
+		t.Error("expected error on empty buffer")
+	}
+}
+
+func TestTakeWAVNotRecording(t *testing.T) {
+	r := &Recorder{buf: []int16{1, 2, 3}, nativeSR: 16000, targetSR: 16000}
+	if _, err := r.TakeWAV(); err == nil {
+		t.Error("expected error when not recording")
+	}
+}
+
+func TestEncodeSamplesEmpty(t *testing.T) {
+	if _, err := encodeSamples(nil, 16000, 16000); err == nil {
+		t.Error("expected error for empty samples")
+	}
+}
