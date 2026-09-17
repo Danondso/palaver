@@ -70,7 +70,7 @@ func (m Model) View() string {
 	// Status / Visualizer
 	b.WriteString(labelStyle.Render("Status:  "))
 	b.WriteString(m.renderBadge())
-	if m.State == StateRecording {
+	if m.State == StateRecording || m.State == StateTranscript {
 		b.WriteString(bodyStyle.Render("  "))
 		b.WriteString(m.renderVisualizer())
 	}
@@ -87,9 +87,19 @@ func (m Model) View() string {
 	}
 	b.WriteString("\n\n")
 
+	if m.State == StateTranscript && m.TranscriptPath != "" {
+		b.WriteString(labelStyle.Render("Writing:  "))
+		b.WriteString(bodyStyle.Render(m.TranscriptPath))
+		b.WriteString("\n\n")
+	}
+
 	// Hotkey info
 	keyName := strings.TrimPrefix(m.HotkeyName, "KEY_")
-	b.WriteString(hotkeyStyle.Render(fmt.Sprintf("Hotkey: %s (hold to record)", keyName)))
+	if m.State == StateTranscript {
+		b.WriteString(hotkeyStyle.Render("Hotkey: disabled (transcript mode)  c: stop"))
+	} else {
+		b.WriteString(hotkeyStyle.Render(fmt.Sprintf("Hotkey: %s (hold to record)  c: transcript", keyName)))
+	}
 	b.WriteString("\n")
 	footer := "Press q to quit  t: theme (" + m.themeName + ")"
 	footer += "  p: tone (" + m.toneName + ")"
@@ -224,6 +234,8 @@ func (m Model) renderBadge() string {
 	switch m.State {
 	case StateRecording:
 		return recordingBadge.Render("● Recording...")
+	case StateTranscript:
+		return recordingBadge.Render("● Transcript...")
 	case StateTranscribing:
 		return transcribingBadge.Render("● Transcribing...")
 	case StatePostProcessing:
