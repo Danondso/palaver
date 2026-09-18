@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/exec"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 
@@ -21,7 +23,11 @@ import (
 	"github.com/Danondso/palaver/internal/server"
 	"github.com/Danondso/palaver/internal/transcriber"
 	"github.com/Danondso/palaver/internal/tui"
+	"github.com/Danondso/palaver/internal/update"
 )
+
+// version is set at link time via -X main.version=<git tag>.
+var version = "dev"
 
 // micCheckerAdapter adapts the package-level recorder.MicAvailable function
 // to the tui.MicChecker interface.
@@ -86,6 +92,49 @@ func runSetup(cfg *config.Config, dbg *log.Logger) {
 	fmt.Println("Setup complete. Run 'palaver' to start.")
 }
 
+func currentVersion() string {
+	if version != "" && version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if info.Main.Version != "" && info.Main.Version != "(devel)" {
+			return info.Main.Version
+		}
+	}
+	if version == "" {
+		return "dev"
+	}
+	return version
+}
+
+func handleUpdate() {
+	result, err := update.Run(update.Options{
+		CurrentVersion: currentVersion(),
+		Stdout:         os.Stdout,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "update failed: %v\n", err)
+		os.Exit(1)
+	}
+	if !result.Updated {
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("Running setup to verify the managed transcription server...")
+	cmd := exec.Command(result.Path, "setup") //nolint:gosec // path is the binary we just installed
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "setup after update failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "The binary was updated to %s. Run 'palaver setup' manually if needed.\n", result.Version)
+		os.Exit(1)
+	}
+
+	fmt.Println()
+	fmt.Println("Update complete. Restart palaver if it is running in another terminal.")
+}
+
 func run() {
 	// Handle setup subcommand before flag parsing
 	if len(os.Args) > 1 && os.Args[1] == "setup" {
@@ -96,7 +145,18 @@ func run() {
 	debug := flag.Bool("debug", false, "enable debug logging to stderr")
 	output := flag.String("output", "", "transcript file path (default: palaver-transcript-TIMESTAMP.txt in cwd)")
 	flag.StringVar(output, "o", "", "transcript file path")
+	doUpdate := flag.Bool("update", false, "download and install the latest palaver release")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(currentVersion())
+		return
+	}
+	if *doUpdate {
+		handleUpdate()
+		return
+	}
 
 	// Set up debug logger
 	var dbg *log.Logger

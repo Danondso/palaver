@@ -43,7 +43,7 @@ jobs:
       - name: Build
         env:
           CGO_ENABLED: "1"
-        run: go build -ldflags "-s -w" -o palaver ./cmd/palaver/
+        run: go build -ldflags "-s -w -X main.version=${{ needs.tag.outputs.new_tag }}" -o palaver ./cmd/palaver/
 
       - name: Package
         run: |
@@ -74,7 +74,7 @@ jobs:
           CGO_ENABLED: "1"
           GOOS: darwin
           GOARCH: arm64
-        run: go build -ldflags "-s -w" -o palaver ./cmd/palaver/
+        run: go build -ldflags "-s -w -X main.version=${{ needs.tag.outputs.new_tag }}" -o palaver ./cmd/palaver/
 
       - name: Package
         run: |
@@ -95,9 +95,14 @@ jobs:
         with:
           merge-multiple: true
 
+      - name: Generate checksums
+        run: sha256sum palaver_*.tar.gz > checksums.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.tag.outputs.new_tag }}
           generate_release_notes: true
-          files: palaver_*.tar.gz
+          files: |
+            palaver_*.tar.gz
+            checksums.txt
