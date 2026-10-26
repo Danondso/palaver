@@ -171,8 +171,12 @@ Or use the `install-from-source.sh` script, which installs build dependencies, c
 ```bash
 ./palaver           # normal mode
 ./palaver --debug   # verbose logging to stderr (hotkey events, WAV size, transcription timing, paste status)
+./palaver --version # print the installed version
+./palaver --update  # replace the installed binary with the latest GitHub release
 ./palaver setup     # download managed Parakeet server, ONNX Runtime, and models
 ```
+
+`palaver --update` downloads the latest release for your platform, verifies its SHA-256 digest, and replaces the installed binary. Config (`~/.config/palaver`) and model files (`~/.local/share/palaver`) are kept. After the binary is replaced, setup runs so missing server/model files can be downloaded. Restart any already-running palaver session to pick up the new version.
 
 The TUI displays the current state (idle/recording/transcribing/rewriting/pasting/error), the last transcription, and hotkey info. Press `q` or `Ctrl+C` to quit, `t` to cycle themes, `p` to cycle tone presets, `m` to cycle LLM models, `r` to restart the managed server.
 
