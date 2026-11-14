@@ -89,6 +89,45 @@ func newTestModel() Model {
 	return NewModel(cfg, &mockTranscriber{result: "test text"}, &postprocess.NoopPostProcessor{}, nil, nil, nil, log.New(io.Discard, "", 0), false)
 }
 
+// fakeMicChecker implements MicChecker with canned results.
+type fakeMicChecker struct {
+	available bool
+	name      string
+}
+
+func (f fakeMicChecker) MicStatus() (bool, string) { return f.available, f.name }
+
+func newTestModelWithMic(mc MicChecker) Model {
+	cfg := config.Default()
+	return NewModel(cfg, &mockTranscriber{result: "test text"}, &postprocess.NoopPostProcessor{}, nil, nil, mc, log.New(io.Discard, "", 0), false)
+}
+
+func TestStatusCheckReportsMicDisconnected(t *testing.T) {
+	m := newTestModelWithMic(fakeMicChecker{available: false, name: ""})
+	msg, ok := m.statusCheckCmd()().(StatusCheckMsg)
+	if !ok {
+		t.Fatal("expected StatusCheckMsg from statusCheckCmd")
+	}
+	if msg.MicDetected {
+		t.Error("expected MicDetected to be false when the mic is gone")
+	}
+}
+
+func TestForceStatusCheckMsgRunsProbe(t *testing.T) {
+	m := newTestModelWithMic(fakeMicChecker{available: true, name: "USB Mic"})
+	_, cmd := m.Update(ForceStatusCheckMsg{})
+	if cmd == nil {
+		t.Fatal("expected ForceStatusCheckMsg to return a status check command")
+	}
+	msg, ok := cmd().(StatusCheckMsg)
+	if !ok {
+		t.Fatal("expected StatusCheckMsg from the forced recheck")
+	}
+	if !msg.MicDetected || msg.MicDeviceName != "USB Mic" {
+		t.Errorf("forced recheck = %+v, want detected USB Mic", msg)
+	}
+}
+
 func TestInitialState(t *testing.T) {
 	m := newTestModel()
 	if m.State != StateIdle {

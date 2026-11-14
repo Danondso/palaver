@@ -33,10 +33,10 @@ type ContinuousRecorder interface {
 	Stop() ([]byte, bool, error)
 }
 
-// MicChecker can report whether a microphone input device is available.
+// MicChecker reports whether a microphone input device is available and its
+// name in a single call, so a probe that re-enumerates devices runs only once.
 type MicChecker interface {
-	MicAvailable() bool
-	MicName() string
+	MicStatus() (available bool, name string)
 }
 
 // State represents the application state.
@@ -94,6 +94,11 @@ type configSavedMsg struct{ err error }
 type audioLevelTickMsg struct{}
 
 type transcriptChunkTickMsg struct{}
+
+// ForceStatusCheckMsg requests an immediate mic + backend status refresh,
+// outside the periodic recheck schedule (for example right after a recording
+// failed to start because the microphone went away).
+type ForceStatusCheckMsg struct{}
 
 // StatusCheckMsg carries the result of a mic + backend availability check.
 type StatusCheckMsg struct {
@@ -332,6 +337,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, scheduleStatusRecheck()
 
 	case statusCheckTickMsg:
+		return m, m.statusCheckCmd()
+
+	case ForceStatusCheckMsg:
 		return m, m.statusCheckCmd()
 
 	case TranscriptionResultMsg:
@@ -684,8 +692,7 @@ func (m Model) statusCheckCmd() tea.Cmd {
 		micOk := false
 		micName := ""
 		if mc != nil {
-			micOk = mc.MicAvailable()
-			micName = mc.MicName()
+			micOk, micName = mc.MicStatus()
 		}
 		backendOk := false
 		modelName := ""
