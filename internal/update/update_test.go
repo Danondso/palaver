@@ -30,11 +30,43 @@ func TestNeedsUpdate(t *testing.T) {
 		{current: "dev", latest: "v1.1.14", want: true},
 		{current: "(devel)", latest: "v1.1.14", want: true},
 		{current: "", latest: "v1.1.14", want: true},
+		{current: "v1.1.17-0.20261026145321-90044777db57", latest: "v1.1.14", want: true},
 	}
 	for _, tt := range tests {
 		if got := needsUpdate(tt.current, tt.latest); got != tt.want {
 			t.Errorf("needsUpdate(%q, %q) = %v, want %v", tt.current, tt.latest, got, tt.want)
 		}
+	}
+}
+
+func TestIsDevVersion(t *testing.T) {
+	tests := []struct {
+		version string
+		want    bool
+	}{
+		{version: "", want: true},
+		{version: "dev", want: true},
+		{version: "(devel)", want: true},
+		{version: "  dev  ", want: true},
+		{version: "v1.1.17-0.20261026145321-90044777db57", want: true},
+		{version: "v1.1.0-0.20231101120000-abcdef012345", want: true},
+		{version: "v1.1.14", want: false},
+		{version: "1.1.14", want: false},
+		{version: "v2.0.0-rc.1", want: false},
+	}
+	for _, tt := range tests {
+		if got := isDevVersion(tt.version); got != tt.want {
+			t.Errorf("isDevVersion(%q) = %v, want %v", tt.version, got, tt.want)
+		}
+	}
+}
+
+func TestDisplayVersion(t *testing.T) {
+	if got := displayVersion("v1.1.17-0.20261026145321-90044777db57"); got != "dev (source build)" {
+		t.Errorf("displayVersion(pseudo) = %q, want dev (source build)", got)
+	}
+	if got := displayVersion("v1.1.14"); got != "v1.1.14" {
+		t.Errorf("displayVersion(release) = %q, want v1.1.14", got)
 	}
 }
 

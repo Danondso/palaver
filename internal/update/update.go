@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -156,20 +157,33 @@ func applyDefaults(opts Options) Options {
 	return opts
 }
 
-func displayVersion(v string) string {
+// pseudoVersionRE matches the trailing timestamp-and-commit of a Go module
+// pseudo-version (for example v1.1.17-0.20261026145321-90044777db57). Such
+// versions identify an untagged source build, not a published release.
+var pseudoVersionRE = regexp.MustCompile(`[-.]\d{14}-[0-9a-f]{12}$`)
+
+// isDevVersion reports whether v denotes a source/dev build rather than a
+// released tag. Empty, "dev", "(devel)", and Go pseudo-versions all qualify.
+func isDevVersion(v string) bool {
 	v = strings.TrimSpace(v)
 	if v == "" || v == "dev" || v == "(devel)" {
+		return true
+	}
+	return pseudoVersionRE.MatchString(v)
+}
+
+func displayVersion(v string) string {
+	if isDevVersion(v) {
 		return "dev (source build)"
 	}
-	return v
+	return strings.TrimSpace(v)
 }
 
 func needsUpdate(current, latest string) bool {
-	c := normalizeVersion(current)
-	if c == "" || c == "dev" || c == "(devel)" {
+	if isDevVersion(current) {
 		return true
 	}
-	return c != normalizeVersion(latest)
+	return normalizeVersion(current) != normalizeVersion(latest)
 }
 
 func normalizeVersion(v string) string {
