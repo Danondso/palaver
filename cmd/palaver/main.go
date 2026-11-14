@@ -29,16 +29,16 @@ import (
 // version is set at link time via -X main.version=<git tag>.
 var version = "dev"
 
-// micCheckerAdapter adapts the package-level recorder.MicAvailable function
-// to the tui.MicChecker interface.
-type micCheckerAdapter struct{}
-
-func (micCheckerAdapter) MicAvailable() bool {
-	return recorder.MicAvailable()
+// micCheckerAdapter adapts the recorder's device probe to the tui.MicChecker
+// interface, re-enumerating audio devices (when not recording) so the status
+// indicator reflects microphones plugged or unplugged after startup.
+type micCheckerAdapter struct {
+	rec *recorder.Recorder
 }
 
-func (micCheckerAdapter) MicName() string {
-	return recorder.MicName()
+func (a micCheckerAdapter) MicStatus() (bool, string) {
+	st := a.rec.ProbeMic()
+	return st.Available, st.Name
 }
 
 func handleSetup() {
@@ -217,6 +217,12 @@ func run() {
 	if err != nil {
 		log.Fatalf("create recorder: %v", err)
 	}
+	// Let the recorder re-enumerate audio devices on demand so mic status
+	// reflects hardware plugged or unplugged after startup.
+	rec.SetReinitFunc(func() error {
+		_ = portaudio.Terminate()
+		return initPortAudio()
+	})
 
 	// Create hotkey listener (platform-specific)
 	listener, err := createListener(cfg, dbg)
@@ -238,7 +244,7 @@ func run() {
 	}
 
 	// Create TUI model and program
-	model := tui.NewModel(cfg, trans, pp, chimePlayer, rec, micCheckerAdapter{}, dbg, *debug)
+	model := tui.NewModel(cfg, trans, pp, chimePlayer, rec, micCheckerAdapter{rec: rec}, dbg, *debug)
 	model.Server = srv
 	serverCtx, serverCancel := context.WithCancel(context.Background())
 	model.ServerCtx = serverCtx
@@ -272,6 +278,8 @@ func run() {
 				defer recMu.Unlock()
 				if err := rec.Start(); err != nil {
 					dbg.Printf("recorder start error: %v", err)
+					p.Send(tui.TranscriptionErrorMsg{Err: fmt.Errorf("recording: %w", err)})
+					p.Send(tui.ForceStatusCheckMsg{})
 					return
 				}
 				p.Send(tui.RecordingStartedMsg{})

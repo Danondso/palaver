@@ -31,6 +31,17 @@ type Recorder struct {
 	truncated      bool
 	unlimited      bool   // when true, readLoop does not apply maxDurationSec
 	audioLevel     uint64 // atomic float64 bits; RMS of last chunk (0.0–1.0)
+
+	reinit    func() error // refreshes PortAudio's device list; nil to skip
+	available bool         // last known input-device availability
+	micName   string       // last known input-device name
+}
+
+// MicStatus reports the most recently observed microphone availability and
+// device name.
+type MicStatus struct {
+	Available bool
+	Name      string
 }
 
 // New creates a Recorder. Call portaudio.Initialize() before using this.
@@ -45,8 +56,50 @@ func New(targetSampleRate, maxDurationSec int) (*Recorder, error) {
 		nativeChannels: defIn.MaxInputChannels,
 		targetSR:       targetSampleRate,
 		maxDurationSec: maxDurationSec,
+		available:      defIn.MaxInputChannels > 0,
 	}, nil
 }
+
+// SetReinitFunc installs a callback that re-initializes PortAudio (typically
+// Terminate followed by Initialize) so the device list is re-enumerated.
+// Without it, ProbeMic reports status from PortAudio's cached device snapshot,
+// which does not reflect microphones plugged or unplugged after startup.
+func (r *Recorder) SetReinitFunc(f func() error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.reinit = f
+}
+
+// ProbeMic refreshes the audio device list when it is safe to do so and reports
+// whether a usable input device is present, along with its name. It is safe to
+// call from any goroutine. While a capture stream is open it does not touch
+// global PortAudio state (re-initializing would race the read loop) and instead
+// returns the most recent known status.
+func (r *Recorder) ProbeMic() MicStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.recording || r.stream != nil {
+		return MicStatus{Available: r.available, Name: r.micName}
+	}
+
+	st := probeDeviceFn(r.reinit)
+	r.available = st.Available
+	r.micName = st.Name
+	if st.Available {
+		// Keep capture params in sync with the current default device so the
+		// next recording opens the stream at its sample rate and channel count.
+		if dev, err := portaudio.DefaultInputDevice(); err == nil && dev != nil && dev.MaxInputChannels > 0 {
+			r.nativeSR = dev.DefaultSampleRate
+			r.nativeChannels = dev.MaxInputChannels
+		}
+	}
+	return st
+}
+
+// probeDeviceFn is the platform device probe, as a variable so tests can
+// substitute a deterministic implementation.
+var probeDeviceFn = probeDevice
 
 // Start begins capturing audio. Returns an error if already recording.
 func (r *Recorder) Start() error {
@@ -65,6 +118,14 @@ func (r *Recorder) start(continuous bool) error {
 
 	if r.recording {
 		return fmt.Errorf("already recording")
+	}
+
+	// Re-read the current default device so a mic swapped in since startup is
+	// opened with its own sample rate and channel count rather than stale
+	// values cached at construction.
+	if dev, err := portaudio.DefaultInputDevice(); err == nil && dev != nil && dev.MaxInputChannels > 0 {
+		r.nativeSR = dev.DefaultSampleRate
+		r.nativeChannels = dev.MaxInputChannels
 	}
 
 	r.buf = nil
@@ -276,13 +337,6 @@ func computeRMS(buf []int16, channels int) float64 {
 		sum += v * v
 	}
 	return math.Sqrt(sum / float64(n))
-}
-
-// MicAvailable returns true if PortAudio can find a default input device.
-// portaudio.Initialize() must have been called before using this.
-func MicAvailable() bool {
-	dev, err := portaudio.DefaultInputDevice()
-	return err == nil && dev != nil && dev.MaxInputChannels > 0
 }
 
 // Resample converts PCM int16 samples from inputRate to outputRate using
