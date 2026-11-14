@@ -1,61 +1,86 @@
 package recorder
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/gordonklaus/portaudio"
 )
 
-// TestProbeMicSkipsReinitWhileRecording verifies ProbeMic never re-initializes
-// PortAudio while a capture stream is live, since that would race the read
-// loop. It must report the last known status instead.
-func TestProbeMicSkipsReinitWhileRecording(t *testing.T) {
-	r := &Recorder{recording: true, available: true, micName: "Cached Mic"}
-	called := false
-	r.reinit = func() error { called = true; return nil }
+// withProbeDevice swaps the platform probe for a stub for the duration of a test.
+func withProbeDevice(t *testing.T, fn func(reinit func() error) MicStatus) {
+	t.Helper()
+	orig := probeDeviceFn
+	probeDeviceFn = fn
+	t.Cleanup(func() { probeDeviceFn = orig })
+}
 
+// TestProbeMicReturnsCachedWhileRecording verifies ProbeMic never runs the
+// device probe while a capture stream is live (which could re-initialize
+// PortAudio and race the read loop); it reports the last known status instead.
+func TestProbeMicReturnsCachedWhileRecording(t *testing.T) {
+	probed := false
+	withProbeDevice(t, func(func() error) MicStatus {
+		probed = true
+		return MicStatus{}
+	})
+
+	r := &Recorder{recording: true, available: true, micName: "Cached Mic"}
 	st := r.ProbeMic()
 
-	if called {
-		t.Error("reinit must not run while recording")
+	if probed {
+		t.Error("probe must not run while recording")
 	}
 	if !st.Available || st.Name != "Cached Mic" {
 		t.Errorf("ProbeMic while recording = %+v, want cached status", st)
 	}
 }
 
-// TestProbeMicSkipsReinitWithOpenStream verifies the same guard applies during
-// the stop window, when recording has been cleared but the stream is not yet
-// closed.
-func TestProbeMicSkipsReinitWithOpenStream(t *testing.T) {
-	r := &Recorder{stream: new(portaudio.Stream), available: true, micName: "Cached Mic"}
-	called := false
-	r.reinit = func() error { called = true; return nil }
+// TestProbeMicReturnsCachedWithOpenStream covers the stop window, when recording
+// is cleared but the stream is not yet closed.
+func TestProbeMicReturnsCachedWithOpenStream(t *testing.T) {
+	probed := false
+	withProbeDevice(t, func(func() error) MicStatus {
+		probed = true
+		return MicStatus{}
+	})
 
+	r := &Recorder{stream: new(portaudio.Stream), available: true, micName: "Cached Mic"}
 	st := r.ProbeMic()
 
-	if called {
-		t.Error("reinit must not run while a stream is open")
+	if probed {
+		t.Error("probe must not run while a stream is open")
 	}
 	if !st.Available || st.Name != "Cached Mic" {
 		t.Errorf("ProbeMic with open stream = %+v, want cached status", st)
 	}
 }
 
-// TestProbeMicReinitFailureReportsUnavailable verifies that when the device
-// list cannot be refreshed, the mic is reported as unavailable rather than
-// falling back to a stale "available" state.
-func TestProbeMicReinitFailureReportsUnavailable(t *testing.T) {
+// TestProbeMicUpdatesCacheFromProbe verifies ProbeMic reflects the probe result
+// and updates the cached status used while recording.
+func TestProbeMicUpdatesCacheFromProbe(t *testing.T) {
+	withProbeDevice(t, func(func() error) MicStatus {
+		return MicStatus{Available: true, Name: "USB Mic"}
+	})
+	r := &Recorder{available: false}
+	if st := r.ProbeMic(); !st.Available || st.Name != "USB Mic" {
+		t.Errorf("ProbeMic = %+v, want available USB Mic", st)
+	}
+	if !r.available || r.micName != "USB Mic" {
+		t.Errorf("cached status = {%v %q}, want available USB Mic", r.available, r.micName)
+	}
+}
+
+// TestProbeMicUnavailableClearsCache verifies a missing mic clears the cached
+// status rather than leaving a stale "available" state.
+func TestProbeMicUnavailableClearsCache(t *testing.T) {
+	withProbeDevice(t, func(func() error) MicStatus {
+		return MicStatus{}
+	})
 	r := &Recorder{available: true, micName: "Stale Mic"}
-	r.reinit = func() error { return errors.New("reinit failed") }
-
-	st := r.ProbeMic()
-
-	if st.Available || st.Name != "" {
-		t.Errorf("ProbeMic after reinit failure = %+v, want unavailable", st)
+	if st := r.ProbeMic(); st.Available || st.Name != "" {
+		t.Errorf("ProbeMic = %+v, want unavailable", st)
 	}
 	if r.available || r.micName != "" {
-		t.Errorf("cached status after reinit failure = {%v %q}, want cleared", r.available, r.micName)
+		t.Errorf("cached status = {%v %q}, want cleared", r.available, r.micName)
 	}
 }

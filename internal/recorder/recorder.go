@@ -83,26 +83,23 @@ func (r *Recorder) ProbeMic() MicStatus {
 		return MicStatus{Available: r.available, Name: r.micName}
 	}
 
-	if r.reinit != nil {
-		if err := r.reinit(); err != nil {
-			r.available = false
-			r.micName = ""
-			return MicStatus{}
+	st := probeDeviceFn(r.reinit)
+	r.available = st.Available
+	r.micName = st.Name
+	if st.Available {
+		// Keep capture params in sync with the current default device so the
+		// next recording opens the stream at its sample rate and channel count.
+		if dev, err := portaudio.DefaultInputDevice(); err == nil && dev != nil && dev.MaxInputChannels > 0 {
+			r.nativeSR = dev.DefaultSampleRate
+			r.nativeChannels = dev.MaxInputChannels
 		}
 	}
-
-	dev, err := portaudio.DefaultInputDevice()
-	if err != nil || dev == nil || dev.MaxInputChannels <= 0 {
-		r.available = false
-		r.micName = ""
-		return MicStatus{}
-	}
-	r.nativeSR = dev.DefaultSampleRate
-	r.nativeChannels = dev.MaxInputChannels
-	r.available = true
-	r.micName = MicName()
-	return MicStatus{Available: true, Name: r.micName}
+	return st
 }
+
+// probeDeviceFn is the platform device probe, as a variable so tests can
+// substitute a deterministic implementation.
+var probeDeviceFn = probeDevice
 
 // Start begins capturing audio. Returns an error if already recording.
 func (r *Recorder) Start() error {

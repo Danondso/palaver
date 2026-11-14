@@ -683,7 +683,7 @@ func transcriptChunkTickCmd() tea.Cmd {
 	})
 }
 
-const statusRecheckInterval = 30 * time.Second
+const statusRecheckInterval = 10 * time.Second
 
 func (m Model) statusCheckCmd() tea.Cmd {
 	t := m.Transcriber
