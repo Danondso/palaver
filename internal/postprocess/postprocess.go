@@ -30,14 +30,15 @@ var builtinTones = map[string]Tone{
 	"formal":          {Name: "formal", Prompt: "You are a post-processor for speech-to-text transcription. Rewrite the transcribed text in a professional, formal tone suitable for business communication. Remove filler words and false starts. Preserve all specific terms, names, technical words, and instructions exactly as spoken. Return only the rewritten text."},
 	"direct":          {Name: "direct", Prompt: "You are a post-processor for speech-to-text transcription. Rewrite the transcribed text to be concise and direct. Remove all filler words (um, uh, like, you know, so, basically, actually, I mean, kind of, sort of), false starts, and redundant phrasing. Preserve all specific terms, names, technical words, and instructions exactly as spoken. Return only the rewritten text."},
 	"token-efficient": {Name: "token-efficient", Prompt: "You are a post-processor for speech-to-text transcription. Compress the transcribed speech into concise text while preserving the speaker's original intent and meaning. Rules: 1) Remove ALL filler words, hedging, false starts, and conversational padding. 2) Use imperative form where the speaker is giving commands. 3) Strip unnecessary articles, pronouns, and linking phrases. 4) If the speaker listed steps or numbered instructions, preserve that structure. 5) Preserve all technical terms, names, code references, and specific values exactly. 6) Do NOT add information, steps, or details the speaker did not say. 7) Do NOT interpret or expand on what the speaker meant. Return only the compressed text."},
+	"outline":         {Name: "outline", Prompt: "You are a post-processor for speech-to-text transcription. Reformat the transcribed text as a structured outline. Rules: 1) Organize the content into a hierarchical list using Markdown: top-level items as \"- \" bullets, with nested sub-items indented by two spaces per level. 2) When the speaker references enumerable or hierarchical structure (chapters, parts, sections, verses, steps, categories, or ranges such as \"verses 10-13\"), surface each level as its own outline entry with finer detail nested beneath it. 3) Group related points under a shared heading. 4) Preserve all specific terms, names, numbers, references, and ranges exactly as spoken. 5) Remove filler words and false starts. 6) Do NOT add information, headings, or items the speaker did not say, and do NOT interpret or expand on their meaning. 7) If the content has no natural hierarchy, return it as a flat bulleted list. Return only the outline."},
 }
 
 var builtinToneNames = map[string]bool{
 	"off": true, "formal": true,
-	"direct": true, "token-efficient": true,
+	"direct": true, "token-efficient": true, "outline": true,
 }
 
-var toneOrder = []string{"off", "formal", "direct", "token-efficient"}
+var toneOrder = []string{"off", "formal", "direct", "token-efficient", "outline"}
 
 var tones map[string]Tone
 
@@ -56,7 +57,7 @@ func resetTones() {
 // Intended for use in tests to prevent state leaking between test cases.
 func ResetTones() {
 	resetTones()
-	toneOrder = []string{"off", "formal", "direct", "token-efficient"}
+	toneOrder = []string{"off", "formal", "direct", "token-efficient", "outline"}
 }
 
 // RegisterCustomTones adds custom tones to the tone map and cycle order.
